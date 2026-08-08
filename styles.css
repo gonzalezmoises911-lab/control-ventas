@@ -580,3 +580,109 @@ dialog::backdrop { background: rgba(46, 16, 101, .38); }
   .section-heading { align-items: flex-start; }
   .section-heading .month-control { min-width: 130px; }
 }
+
+
+.client-detail-panel {
+  margin-top: 14px;
+}
+
+.client-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+  margin-bottom: 18px;
+}
+
+.client-summary-grid article {
+  border: 1px solid #e9d5ff;
+  border-radius: 14px;
+  background: #faf5ff;
+  padding: 12px;
+}
+
+.client-summary-grid span,
+.client-summary-grid strong {
+  display: block;
+}
+
+.client-summary-grid span {
+  color: var(--muted);
+  font-size: .72rem;
+}
+
+.client-summary-grid strong {
+  margin-top: 5px;
+  color: var(--purple-800);
+  font-size: 1rem;
+}
+
+.detail-section {
+  margin-bottom: 18px;
+}
+
+.detail-section h4 {
+  margin: 0 0 8px;
+  color: var(--purple-950);
+  font-size: .92rem;
+}
+
+.detail-list {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: white;
+}
+
+.detail-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid #f0edf5;
+}
+
+.detail-row:last-child {
+  border-bottom: 0;
+}
+
+.detail-row strong,
+.detail-row small {
+  display: block;
+}
+
+.detail-row small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: .75rem;
+}
+
+.detail-row .detail-amount {
+  color: var(--purple-800);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.detail-row.payment .detail-amount {
+  color: var(--green-700);
+}
+
+.debtor-card.clickable {
+  cursor: pointer;
+}
+
+.debtor-card.clickable:hover {
+  border-color: #c4b5fd;
+  background: #fdfbff;
+}
+
+.debtor-card .view-detail-note {
+  margin: 8px 0 0;
+  color: var(--purple-700);
+  font-size: .75rem;
+}
+
+@media (max-width: 520px) {
+  .client-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}

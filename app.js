@@ -26,6 +26,7 @@ const paymentsRef = collection(db, "pagos");
 let sales = [];
 let payments = [];
 let selectedPaymentClient = null;
+let selectedDetailClient = null;
 let historyType = "all";
 let pendingDelete = null;
 
@@ -48,6 +49,14 @@ const paymentDateInput = $("#paymentDate");
 const savePaymentButton = $("#savePaymentButton");
 const paymentMessage = $("#paymentMessage");
 const confirmDialog = $("#confirmDialog");
+const clientDetailPanel = $("#clientDetailPanel");
+const clientDetailName = $("#clientDetailName");
+const clientDetailSummary = $("#clientDetailSummary");
+const clientCreditTotal = $("#clientCreditTotal");
+const clientPaidTotal = $("#clientPaidTotal");
+const clientPendingTotal = $("#clientPendingTotal");
+const clientSalesHistory = $("#clientSalesHistory");
+const clientPaymentsHistory = $("#clientPaymentsHistory");
 
 const today = new Date();
 const todayISO = toISODate(today);
@@ -192,6 +201,15 @@ function render() {
   renderRecent();
   renderDebtors(debtors);
   renderHistory();
+
+  if (selectedDetailClient && !clientDetailPanel.classList.contains("hidden")) {
+    const updated = debtors.find(item => item.clientKey === selectedDetailClient.clientKey);
+    if (updated) {
+      openClientDetail(updated);
+    } else {
+      closeClientDetail();
+    }
+  }
 }
 
 function renderRecent() {
@@ -241,24 +259,89 @@ function renderDebtors(debtors) {
   }
 
   container.innerHTML = debtors.map(item => `
-    <article class="debtor-card">
+    <article class="debtor-card clickable" data-client-key="${escapeAttr(item.clientKey)}">
       <div class="debtor-head">
         <strong>${escapeHTML(item.clientName)}</strong>
         <strong class="amount">${formatCurrency(item.debt)}</strong>
       </div>
       <p class="debtor-meta">${item.salesCount} ${item.salesCount === 1 ? "venta a crédito" : "ventas a crédito"}</p>
+      <p class="view-detail-note">Toca para ver artículos y pagos</p>
       <div class="debtor-actions">
         <button class="small-button register-payment" data-client-key="${escapeAttr(item.clientKey)}">Registrar pago</button>
       </div>
     </article>
   `).join("");
 
+  container.querySelectorAll(".debtor-card").forEach(card => {
+    card.addEventListener("click", event => {
+      if (event.target.closest(".register-payment")) return;
+      const debtor = debtors.find(item => item.clientKey === card.dataset.clientKey);
+      openClientDetail(debtor);
+    });
+  });
+
   $$(".register-payment").forEach(button => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", event => {
+      event.stopPropagation();
       const debtor = debtors.find(item => item.clientKey === button.dataset.clientKey);
       openPaymentPanel(debtor);
     });
   });
+}
+
+function openClientDetail(debtor) {
+  selectedDetailClient = debtor;
+
+  const creditSales = sales
+    .filter(item => item.status === "credit" && item.clientKey === debtor.clientKey)
+    .sort((a, b) => timestampMillis(b) - timestampMillis(a));
+
+  const clientPayments = payments
+    .filter(item => item.clientKey === debtor.clientKey)
+    .sort((a, b) => timestampMillis(b) - timestampMillis(a));
+
+  const totalCredit = creditSales.reduce((sum, item) => sum + Number(item.amount), 0);
+  const totalPaid = clientPayments.reduce((sum, item) => sum + Number(item.amount), 0);
+  const pending = Math.max(0, totalCredit - totalPaid);
+
+  clientDetailName.textContent = debtor.clientName;
+  clientDetailSummary.textContent = `${creditSales.length} ${creditSales.length === 1 ? "compra a crédito" : "compras a crédito"} · ${clientPayments.length} ${clientPayments.length === 1 ? "pago" : "pagos"}`;
+  clientCreditTotal.textContent = formatCurrency(totalCredit);
+  clientPaidTotal.textContent = formatCurrency(totalPaid);
+  clientPendingTotal.textContent = formatCurrency(pending);
+
+  clientSalesHistory.innerHTML = creditSales.length
+    ? creditSales.map(item => `
+        <article class="detail-row">
+          <div>
+            <strong>${escapeHTML(item.article)}</strong>
+            <small>${formatDate(item.date)}</small>
+          </div>
+          <span class="detail-amount">${formatCurrency(item.amount)}</span>
+        </article>
+      `).join("")
+    : '<p class="empty-state">No hay compras a crédito.</p>';
+
+  clientPaymentsHistory.innerHTML = clientPayments.length
+    ? clientPayments.map(item => `
+        <article class="detail-row payment">
+          <div>
+            <strong>Pago recibido</strong>
+            <small>${formatDate(item.date)}</small>
+          </div>
+          <span class="detail-amount">+${formatCurrency(item.amount)}</span>
+        </article>
+      `).join("")
+    : '<p class="empty-state">Todavía no ha realizado pagos.</p>';
+
+  paymentPanel.classList.add("hidden");
+  clientDetailPanel.classList.remove("hidden");
+  clientDetailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closeClientDetail() {
+  selectedDetailClient = null;
+  clientDetailPanel.classList.add("hidden");
 }
 
 function renderHistory() {
@@ -291,6 +374,7 @@ function bindDeleteButtons(container) {
 
 function openPaymentPanel(debtor) {
   selectedPaymentClient = debtor;
+  clientDetailPanel.classList.add("hidden");
   paymentClientLabel.textContent = `${debtor.clientName} · Debe ${formatCurrency(debtor.debt)}`;
   paymentAmountInput.value = "";
   paymentDateInput.value = todayISO;
@@ -405,6 +489,10 @@ function escapeAttr(value) {
 saveSaleButton.addEventListener("click", saveSale);
 savePaymentButton.addEventListener("click", savePayment);
 $("#closePaymentPanel").addEventListener("click", closePaymentPanel);
+$("#closeClientDetail").addEventListener("click", closeClientDetail);
+$("#detailRegisterPayment").addEventListener("click", () => {
+  if (selectedDetailClient) openPaymentPanel(selectedDetailClient);
+});
 
 saleAmountInput.addEventListener("blur", () => formatAmountInput(saleAmountInput));
 paymentAmountInput.addEventListener("blur", () => formatAmountInput(paymentAmountInput));

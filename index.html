@@ -144,6 +144,44 @@
         <p class="empty-state">No hay cuentas pendientes.</p>
       </div>
 
+
+      <section id="clientDetailPanel" class="panel client-detail-panel hidden">
+        <div class="panel-title">
+          <div>
+            <h3 id="clientDetailName">Detalle del cliente</h3>
+            <p id="clientDetailSummary"></p>
+          </div>
+          <button id="closeClientDetail" class="icon-button" type="button" aria-label="Cerrar">×</button>
+        </div>
+
+        <div class="client-summary-grid">
+          <article>
+            <span>Total comprado</span>
+            <strong id="clientCreditTotal">₡0</strong>
+          </article>
+          <article>
+            <span>Total pagado</span>
+            <strong id="clientPaidTotal">₡0</strong>
+          </article>
+          <article>
+            <span>Saldo pendiente</span>
+            <strong id="clientPendingTotal">₡0</strong>
+          </article>
+        </div>
+
+        <div class="detail-section">
+          <h4>Artículos comprados a crédito</h4>
+          <div id="clientSalesHistory" class="detail-list"></div>
+        </div>
+
+        <div class="detail-section">
+          <h4>Historial de pagos</h4>
+          <div id="clientPaymentsHistory" class="detail-list"></div>
+        </div>
+
+        <button id="detailRegisterPayment" class="primary-button" type="button">Registrar pago</button>
+      </section>
+
       <section id="paymentPanel" class="panel form-panel hidden">
         <div class="panel-title">
           <div>
