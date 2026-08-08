@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#7c3aed">
+  <meta name="description" content="Control sencillo de ventas, clientes y cuentas por cobrar.">
+  <title>Control de Ventas</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon-192.png">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Negocio compartido</p>
+        <h1>Control de Ventas</h1>
+      </div>
+      <span id="connectionStatus" class="status-pill">Conectando…</span>
+    </header>
+
+    <section id="view-home" class="view active" aria-labelledby="homeTitle">
+      <div class="section-heading">
+        <div>
+          <h2 id="homeTitle">Resumen</h2>
+          <p>Ventas y cobros del período seleccionado.</p>
+        </div>
+        <label class="month-control">
+          <span>Mes</span>
+          <input id="monthFilter" type="month">
+        </label>
+      </div>
+
+      <div class="metrics-grid">
+        <article class="metric-card purple">
+          <span>Ventas del mes</span>
+          <strong id="monthSales">₡0</strong>
+          <small id="monthSalesCount">0 ventas</small>
+        </article>
+        <article class="metric-card lavender">
+          <span>Cobrado este mes</span>
+          <strong id="monthCollected">₡0</strong>
+          <small>Pagado + abonos</small>
+        </article>
+        <article class="metric-card rose">
+          <span>Por cobrar actual</span>
+          <strong id="currentDebt">₡0</strong>
+          <small id="debtClientCount">0 clientes</small>
+        </article>
+      </div>
+
+      <div class="quick-grid">
+        <button class="quick-action" data-go="sale">
+          <span class="quick-icon">＋</span>
+          <span>Nueva venta</span>
+        </button>
+        <button class="quick-action" data-go="debts">
+          <span class="quick-icon">👥</span>
+          <span>Cuentas por cobrar</span>
+        </button>
+      </div>
+
+      <section class="panel">
+        <div class="panel-title">
+          <h3>Movimientos recientes</h3>
+          <button class="text-button" data-go="history">Ver todos</button>
+        </div>
+        <div id="recentList" class="list">
+          <p class="empty-state">Todavía no hay movimientos.</p>
+        </div>
+      </section>
+    </section>
+
+    <section id="view-sale" class="view" aria-labelledby="saleTitle">
+      <div class="section-heading">
+        <div>
+          <h2 id="saleTitle">Registrar venta</h2>
+          <p>Guarda una venta pagada o a crédito.</p>
+        </div>
+      </div>
+
+      <section class="panel form-panel">
+        <label>
+          <span>Nombre del cliente</span>
+          <input id="clientName" type="text" maxlength="100" placeholder="Ej. María Rodríguez" autocomplete="name">
+        </label>
+
+        <label>
+          <span>Artículo</span>
+          <input id="article" type="text" maxlength="120" placeholder="Ej. Crema Karsell">
+        </label>
+
+        <label>
+          <span>Monto</span>
+          <div class="money-input">
+            <span>₡</span>
+            <input id="saleAmount" type="text" inputmode="numeric" placeholder="0">
+          </div>
+        </label>
+
+        <label>
+          <span>Fecha</span>
+          <div class="date-wrap">
+            <input id="saleDate" type="date">
+          </div>
+        </label>
+
+        <fieldset>
+          <legend>Estado</legend>
+          <div class="segmented">
+            <label>
+              <input type="radio" name="saleStatus" value="paid" checked>
+              <span>✓ Pagado</span>
+            </label>
+            <label>
+              <input type="radio" name="saleStatus" value="credit">
+              <span>◷ A crédito</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <button id="saveSaleButton" class="primary-button" type="button">Guardar venta</button>
+        <p id="saleMessage" class="form-message" aria-live="polite"></p>
+      </section>
+    </section>
+
+    <section id="view-debts" class="view" aria-labelledby="debtsTitle">
+      <div class="section-heading">
+        <div>
+          <h2 id="debtsTitle">Cuentas por cobrar</h2>
+          <p>Clientes con saldo pendiente.</p>
+        </div>
+      </div>
+
+      <article class="debt-total-card">
+        <span>Total por cobrar</span>
+        <strong id="debtTotalTop">₡0</strong>
+        <small id="debtPeopleTop">0 clientes</small>
+      </article>
+
+      <div id="debtorsList" class="list debtors-list">
+        <p class="empty-state">No hay cuentas pendientes.</p>
+      </div>
+
+      <section id="paymentPanel" class="panel form-panel hidden">
+        <div class="panel-title">
+          <div>
+            <h3>Registrar pago</h3>
+            <p id="paymentClientLabel"></p>
+          </div>
+          <button id="closePaymentPanel" class="icon-button" type="button" aria-label="Cerrar">×</button>
+        </div>
+
+        <label>
+          <span>Monto recibido</span>
+          <div class="money-input">
+            <span>₡</span>
+            <input id="paymentAmount" type="text" inputmode="numeric" placeholder="0">
+          </div>
+        </label>
+
+        <label>
+          <span>Fecha</span>
+          <div class="date-wrap">
+            <input id="paymentDate" type="date">
+          </div>
+        </label>
+
+        <button id="savePaymentButton" class="primary-button" type="button">Guardar pago</button>
+        <p id="paymentMessage" class="form-message" aria-live="polite"></p>
+      </section>
+    </section>
+
+    <section id="view-history" class="view" aria-labelledby="historyTitle">
+      <div class="section-heading">
+        <div>
+          <h2 id="historyTitle">Histórico</h2>
+          <p>Ventas y pagos registrados.</p>
+        </div>
+        <label class="month-control">
+          <span>Mes</span>
+          <input id="historyMonthFilter" type="month">
+        </label>
+      </div>
+
+      <div class="history-tabs" role="tablist">
+        <button class="history-tab active" data-history="all" type="button">Todo</button>
+        <button class="history-tab" data-history="sales" type="button">Ventas</button>
+        <button class="history-tab" data-history="payments" type="button">Pagos</button>
+      </div>
+
+      <div id="historyList" class="list">
+        <p class="empty-state">Todavía no hay movimientos.</p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="Navegación principal">
+    <button class="nav-button active" data-view="home" type="button"><span>⌂</span>Inicio</button>
+    <button class="nav-button" data-view="sale" type="button"><span>＋</span>Venta</button>
+    <button class="nav-button" data-view="debts" type="button"><span>👥</span>Cobros</button>
+    <button class="nav-button" data-view="history" type="button"><span>≡</span>Histórico</button>
+  </nav>
+
+  <dialog id="confirmDialog">
+    <form method="dialog" class="dialog-card">
+      <h3>Eliminar registro</h3>
+      <p>Esta acción no se puede deshacer.</p>
+      <div class="dialog-actions">
+        <button value="cancel" class="secondary-button">Cancelar</button>
+        <button id="confirmDeleteButton" value="confirm" class="danger-button">Eliminar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
