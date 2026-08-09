@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#7c3aed">
   <meta name="description" content="Control sencillo de ventas, clientes y cuentas por cobrar.">
   <title>Control de Ventas</title>
-  <link rel="manifest" href="./manifest.webmanifest?v=5">
+  <link rel="manifest" href="./manifest.webmanifest?v=6">
   <link rel="icon" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
-  <link rel="stylesheet" href="./styles.css?v=5">
+  <link rel="stylesheet" href="./styles.css?v=6">
 </head>
 <body>
   <main class="app-shell">
@@ -52,7 +52,8 @@
         <article class="metric-card cash">
           <span>Flujo de caja</span>
           <strong id="cashFlow">₡0</strong>
-          <small>Disponible acumulado</small>
+          <small>Saldo manual acumulado</small>
+          <button id="adjustCashFlowButton" class="cash-adjust-button" type="button">Ajustar saldo</button>
         </article>
       </div>
 
@@ -280,6 +281,26 @@
     </section>
   </main>
 
+
+  <dialog id="cashFlowDialog">
+    <form method="dialog" class="dialog-card" id="cashFlowForm">
+      <h2>Ajustar flujo de caja</h2>
+      <p>Escribe el saldo real que quieres mantener como flujo de caja.</p>
+      <label>
+        <span>Saldo</span>
+        <div class="money-input">
+          <span>₡</span>
+          <input id="cashFlowAmount" type="text" inputmode="numeric" placeholder="0">
+        </div>
+      </label>
+      <p id="cashFlowMessage" class="form-message" aria-live="polite"></p>
+      <div class="dialog-actions">
+        <button id="cancelCashFlowButton" type="button" class="secondary-button">Cancelar</button>
+        <button id="saveCashFlowButton" type="button" class="primary-button">Guardar saldo</button>
+      </div>
+    </form>
+  </dialog>
+
   <nav class="bottom-nav" aria-label="Navegación principal">
     <button class="nav-button active" data-view="home" type="button"><span>⌂</span>Inicio</button>
     <button class="nav-button" data-view="sale" type="button"><span>＋</span>Venta</button>
@@ -299,6 +320,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="./app.js?v=5"></script>
+  <script type="module" src="./app.js?v=6"></script>
 </body>
 </html>

@@ -23,10 +23,12 @@ const db = getFirestore(app);
 const salesRef = collection(db, "ventas");
 const paymentsRef = collection(db, "pagos");
 const businessPurchasesRef = collection(db, "compras_negocio");
+const cashFlowRef = doc(db, "configuracion", "flujo_caja");
 
 let sales = [];
 let payments = [];
 let businessPurchases = [];
+let manualCashFlow = 0;
 let selectedPaymentClient = null;
 let selectedDetailClient = null;
 let historyType = "all";
@@ -55,6 +57,12 @@ const businessPurchaseAmountInput = $("#businessPurchaseAmount");
 const businessPurchaseDateInput = $("#businessPurchaseDate");
 const saveBusinessPurchaseButton = $("#saveBusinessPurchaseButton");
 const businessPurchaseMessage = $("#businessPurchaseMessage");
+const adjustCashFlowButton = $("#adjustCashFlowButton");
+const cashFlowDialog = $("#cashFlowDialog");
+const cashFlowAmountInput = $("#cashFlowAmount");
+const cashFlowMessage = $("#cashFlowMessage");
+const saveCashFlowButton = $("#saveCashFlowButton");
+const cancelCashFlowButton = $("#cancelCashFlowButton");
 const confirmDialog = $("#confirmDialog");
 const clientDetailPanel = $("#clientDetailPanel");
 const clientDetailName = $("#clientDetailName");
@@ -178,12 +186,7 @@ function calculateMonthSummary(month) {
 }
 
 function calculateCashFlow() {
-  const paidSales = sales
-    .filter(item => item.status === "paid")
-    .reduce((sum, item) => sum + Number(item.amount), 0);
-  const receivedPayments = payments.reduce((sum, item) => sum + Number(item.amount), 0);
-  const purchases = businessPurchases.reduce((sum, item) => sum + Number(item.amount), 0);
-  return paidSales + receivedPayments - purchases;
+  return Number(manualCashFlow) || 0;
 }
 
 function allMovements() {
@@ -525,11 +528,26 @@ async function saveBusinessPurchase() {
 
   saveBusinessPurchaseButton.disabled = true;
   try {
-    await addDoc(businessPurchasesRef, {
-      description,
-      amount,
-      date,
-      createdAt: serverTimestamp()
+    const purchaseDoc = doc(businessPurchasesRef);
+    await runTransaction(db, async transaction => {
+      const cashSnapshot = await transaction.get(cashFlowRef);
+      const currentCash = cashSnapshot.exists() ? Number(cashSnapshot.data().amount) || 0 : 0;
+
+      if (amount > currentCash) {
+        throw new Error("INSUFFICIENT_CASH");
+      }
+
+      transaction.set(purchaseDoc, {
+        description,
+        amount,
+        date,
+        createdAt: serverTimestamp()
+      });
+
+      transaction.set(cashFlowRef, {
+        amount: currentCash - amount,
+        updatedAt: serverTimestamp()
+      });
     });
     businessPurchaseDescriptionInput.value = "";
     businessPurchaseAmountInput.value = "";
@@ -537,7 +555,11 @@ async function saveBusinessPurchase() {
     showMessage(businessPurchaseMessage, "Compra guardada.");
   } catch (error) {
     console.error(error);
-    showMessage(businessPurchaseMessage, "No se pudo guardar la compra.", "error");
+    if (error?.message === "INSUFFICIENT_CASH") {
+      showMessage(businessPurchaseMessage, "Flujo de caja insuficiente.", "error");
+    } else {
+      showMessage(businessPurchaseMessage, "No se pudo guardar la compra.", "error");
+    }
   } finally {
     saveBusinessPurchaseButton.disabled = false;
   }
@@ -558,6 +580,46 @@ function escapeAttr(value) {
 
 saveSaleButton.addEventListener("click", saveSale);
 savePaymentButton.addEventListener("click", savePayment);
+
+function openCashFlowDialog() {
+  cashFlowAmountInput.value = manualCashFlow
+    ? new Intl.NumberFormat("es-CR").format(manualCashFlow)
+    : "";
+  showMessage(cashFlowMessage, "");
+  cashFlowDialog.showModal();
+}
+
+async function saveManualCashFlow() {
+  const amount = parseAmount(cashFlowAmountInput.value);
+
+  if (Number.isNaN(amount) || amount < 0) {
+    showMessage(cashFlowMessage, "Escribe un saldo válido.", "error");
+    return;
+  }
+
+  saveCashFlowButton.disabled = true;
+  try {
+    await runTransaction(db, async transaction => {
+      transaction.set(cashFlowRef, {
+        amount,
+        updatedAt: serverTimestamp()
+      });
+    });
+    cashFlowDialog.close();
+  } catch (error) {
+    console.error(error);
+    showMessage(cashFlowMessage, "No se pudo guardar el flujo de caja.", "error");
+  } finally {
+    saveCashFlowButton.disabled = false;
+  }
+}
+
+adjustCashFlowButton.addEventListener("click", openCashFlowDialog);
+cancelCashFlowButton.addEventListener("click", () => cashFlowDialog.close());
+saveCashFlowButton.addEventListener("click", saveManualCashFlow);
+cashFlowAmountInput.addEventListener("blur", () => formatAmountInput(cashFlowAmountInput));
+
+
 saveBusinessPurchaseButton.addEventListener("click", saveBusinessPurchase);
 $("#closePaymentPanel").addEventListener("click", closePaymentPanel);
 $("#closeClientDetail").addEventListener("click", closeClientDetail);
@@ -603,9 +665,10 @@ $("#confirmDeleteButton").addEventListener("click", async (event) => {
 let salesReady = false;
 let paymentsReady = false;
 let businessPurchasesReady = false;
+let cashFlowReady = false;
 
 function updateConnectionState() {
-  if (salesReady && paymentsReady && businessPurchasesReady) {
+  if (salesReady && paymentsReady && businessPurchasesReady && cashFlowReady) {
     connectionStatus.textContent = "Sincronizado";
     connectionStatus.classList.remove("error");
   }
@@ -633,6 +696,18 @@ onSnapshot(paymentsRef, snapshot => {
   connectionStatus.classList.add("error");
 });
 
+
+
+onSnapshot(cashFlowRef, snapshot => {
+  manualCashFlow = snapshot.exists() ? Number(snapshot.data().amount) || 0 : 0;
+  cashFlowReady = true;
+  updateConnectionState();
+  render();
+}, error => {
+  console.error(error);
+  connectionStatus.textContent = "Error de conexión";
+  connectionStatus.classList.add("error");
+});
 
 onSnapshot(businessPurchasesRef, snapshot => {
   businessPurchases = snapshot.docs.map(document => ({ id: document.id, ...document.data() }));
