@@ -26,11 +26,13 @@ const salesRef = collection(db, "ventas");
 const paymentsRef = collection(db, "pagos");
 const businessPurchasesRef = collection(db, "compras_negocio");
 const cashFlowRef = doc(db, "configuracion", "flujo_caja");
+const inventoryRef = collection(db, "inventario");
 
 let sales = [];
 let payments = [];
 let businessPurchases = [];
 let manualCashFlow = 0;
+let inventory = [];
 let selectedPaymentClient = null;
 let selectedDetailClient = null;
 let historyType = "all";
@@ -44,6 +46,8 @@ const monthFilter = $("#monthFilter");
 const historyMonthFilter = $("#historyMonthFilter");
 const clientNameInput = $("#clientName");
 const articleInput = $("#article");
+const saleQuantityInput = $("#saleQuantity");
+const articleStockHint = $("#articleStockHint");
 const saleAmountInput = $("#saleAmount");
 const saleDateInput = $("#saleDate");
 const saveSaleButton = $("#saveSaleButton");
@@ -65,6 +69,11 @@ const cashFlowAmountInput = $("#cashFlowAmount");
 const cashFlowMessage = $("#cashFlowMessage");
 const saveCashFlowButton = $("#saveCashFlowButton");
 const cancelCashFlowButton = $("#cancelCashFlowButton");
+const inventoryProductNameInput = $("#inventoryProductName");
+const inventoryProductQuantityInput = $("#inventoryProductQuantity");
+const saveInventoryProductButton = $("#saveInventoryProductButton");
+const inventoryMessage = $("#inventoryMessage");
+const inventoryList = $("#inventoryList");
 const confirmDialog = $("#confirmDialog");
 const clientDetailPanel = $("#clientDetailPanel");
 const clientDetailName = $("#clientDetailName");
@@ -225,6 +234,8 @@ function render() {
   $("#debtTotalTop").textContent = formatCurrency(totalDebt);
   $("#debtPeopleTop").textContent = `${debtors.length} ${debtors.length === 1 ? "cliente" : "clientes"}`;
 
+  renderInventory();
+  renderArticleOptions();
   renderRecent();
   renderDebtors(debtors);
   renderHistory();
@@ -236,6 +247,129 @@ function render() {
     } else {
       closeClientDetail();
     }
+  }
+}
+
+function activeInventory() {
+  return inventory
+    .filter(item => Number(item.quantity) > 0)
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+}
+
+function renderArticleOptions() {
+  const currentValue = articleInput.value;
+  const items = activeInventory();
+
+  articleInput.innerHTML = `
+    <option value="">Seleccionar artículo…</option>
+    ${items.map(item => `<option value="${escapeAttr(item.id)}">${escapeHTML(item.name)} — ${item.quantity} disponibles</option>`).join("")}
+  `;
+
+  if (items.some(item => item.id === currentValue)) {
+    articleInput.value = currentValue;
+  }
+
+  articleInput.disabled = items.length === 0;
+  saleQuantityInput.disabled = items.length === 0;
+  articleStockHint.textContent = items.length
+    ? "Selecciona un producto del inventario."
+    : "Agrega productos desde Inventario.";
+}
+
+function renderInventory() {
+  const items = activeInventory();
+  const units = items.reduce((sum, item) => sum + Number(item.quantity), 0);
+
+  $("#inventoryProductCount").textContent = String(items.length);
+  $("#inventoryUnitCount").textContent = String(units);
+
+  if (!items.length) {
+    inventoryList.innerHTML = '<p class="empty-state">Todavía no hay productos disponibles.</p>';
+    return;
+  }
+
+  inventoryList.innerHTML = items.map(item => `
+    <article class="inventory-item">
+      <div>
+        <strong>${escapeHTML(item.name)}</strong>
+        <small>${item.quantity} ${Number(item.quantity) === 1 ? "unidad disponible" : "unidades disponibles"}</small>
+      </div>
+      <div class="inventory-controls">
+        <button type="button" data-inventory-change="-1" data-product-id="${escapeAttr(item.id)}" aria-label="Restar una unidad">−</button>
+        <span>${item.quantity}</span>
+        <button type="button" data-inventory-change="1" data-product-id="${escapeAttr(item.id)}" aria-label="Agregar una unidad">+</button>
+      </div>
+    </article>
+  `).join("");
+}
+
+async function addInventoryProduct() {
+  const name = inventoryProductNameInput.value.trim().replace(/\s+/g, " ");
+  const quantity = Number.parseInt(inventoryProductQuantityInput.value, 10);
+
+  if (!name || !Number.isInteger(quantity) || quantity <= 0) {
+    showMessage(inventoryMessage, "Completa el producto y una cantidad válida.", "error");
+    return;
+  }
+
+  const normalizedName = name.toLocaleLowerCase("es")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  const existing = inventory.find(item => item.normalizedName === normalizedName);
+
+  saveInventoryProductButton.disabled = true;
+  try {
+    if (existing) {
+      await runTransaction(db, async transaction => {
+        const ref = doc(db, "inventario", existing.id);
+        const snapshot = await transaction.get(ref);
+        const current = snapshot.exists() ? Number(snapshot.data().quantity) || 0 : 0;
+        transaction.update(ref, {
+          quantity: current + quantity,
+          updatedAt: serverTimestamp()
+        });
+      });
+      showMessage(inventoryMessage, "Cantidad agregada al producto existente.");
+    } else {
+      await addDoc(inventoryRef, {
+        name,
+        normalizedName,
+        quantity,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      showMessage(inventoryMessage, "Producto agregado al inventario.");
+    }
+
+    inventoryProductNameInput.value = "";
+    inventoryProductQuantityInput.value = "";
+  } catch (error) {
+    console.error(error);
+    showMessage(inventoryMessage, "No se pudo guardar el producto.", "error");
+  } finally {
+    saveInventoryProductButton.disabled = false;
+  }
+}
+
+async function changeInventoryQuantity(productId, delta) {
+  try {
+    await runTransaction(db, async transaction => {
+      const ref = doc(db, "inventario", productId);
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists()) throw new Error("PRODUCT_NOT_FOUND");
+
+      const current = Number(snapshot.data().quantity) || 0;
+      const next = Math.max(0, current + delta);
+
+      transaction.update(ref, {
+        quantity: next,
+        updatedAt: serverTimestamp()
+      });
+    });
+  } catch (error) {
+    console.error(error);
+    showMessage(inventoryMessage, "No se pudo actualizar la cantidad.", "error");
   }
 }
 
@@ -265,7 +399,7 @@ function movementHTML(item, showDelete = true) {
     ? `Pago recibido · ${formatDate(item.date)}`
     : isBusinessPurchase
       ? `Compra para el negocio · ${formatDate(item.date)}`
-      : `${escapeHTML(item.article)} · ${item.status === "paid" ? "Pagado" : "A crédito"} · ${formatDate(item.date)}`;
+      : `${escapeHTML(item.article)}${item.quantity ? ` · ${item.quantity} ${Number(item.quantity) === 1 ? "unidad" : "unidades"}` : ""} · ${item.status === "paid" ? "Pagado" : "A crédito"} · ${formatDate(item.date)}`;
 
   const amountClass = isBusinessPurchase ? "debt" : (isPayment || isPaidSale ? "paid" : "debt");
   const amountPrefix = isBusinessPurchase ? "−" : (isPayment || isPaidSale ? "+" : "");
@@ -352,7 +486,7 @@ function openClientDetail(debtor) {
         <article class="detail-row">
           <div>
             <strong>${escapeHTML(item.article)}</strong>
-            <small>${formatDate(item.date)}</small>
+            <small>${item.quantity ? `${item.quantity} ${Number(item.quantity) === 1 ? "unidad" : "unidades"} · ` : ""}${formatDate(item.date)}</small>
           </div>
           <span class="detail-amount">${formatCurrency(item.amount)}</span>
         </article>
@@ -439,37 +573,69 @@ function setView(name) {
 }
 
 async function saveSale() {
-  const name = normalizeClientName(clientNameInput.value);
-  const article = articleInput.value.trim();
+  const clientName = normalizeClientName(clientNameInput.value);
+  const productId = articleInput.value;
+  const selectedProduct = inventory.find(item => item.id === productId);
+  const quantity = Number.parseInt(saleQuantityInput.value, 10);
   const amount = parseAmount(saleAmountInput.value);
   const date = saleDateInput.value;
   const status = $('input[name="saleStatus"]:checked')?.value;
 
-  if (!name || !article || !amount || !date || !status) {
-    showMessage(saleMessage, "Completa todos los datos.", "error");
+  if (!clientName || !productId || !selectedProduct || !Number.isInteger(quantity) || quantity <= 0 || !amount || !date || !status) {
+    showMessage(saleMessage, "Completa cliente, artículo, cantidad, monto y fecha.", "error");
+    return;
+  }
+
+  if (quantity > Number(selectedProduct.quantity)) {
+    showMessage(saleMessage, `Solo hay ${selectedProduct.quantity} unidades disponibles.`, "error");
     return;
   }
 
   saveSaleButton.disabled = true;
+
   try {
-    await addDoc(salesRef, {
-      clientName: name,
-      clientKey: clientKey(name),
-      article,
-      amount,
-      status,
-      date,
-      createdAt: serverTimestamp()
+    const saleDoc = doc(salesRef);
+    const productDoc = doc(db, "inventario", productId);
+
+    await runTransaction(db, async transaction => {
+      const productSnapshot = await transaction.get(productDoc);
+      if (!productSnapshot.exists()) throw new Error("PRODUCT_NOT_FOUND");
+
+      const stock = Number(productSnapshot.data().quantity) || 0;
+      if (quantity > stock) throw new Error("INSUFFICIENT_STOCK");
+
+      transaction.set(saleDoc, {
+        clientName,
+        clientKey: clientKey(clientName),
+        productId,
+        article: productSnapshot.data().name,
+        quantity,
+        amount,
+        status,
+        date,
+        createdAt: serverTimestamp()
+      });
+
+      transaction.update(productDoc, {
+        quantity: stock - quantity,
+        updatedAt: serverTimestamp()
+      });
     });
+
     clientNameInput.value = "";
     articleInput.value = "";
+    saleQuantityInput.value = "";
     saleAmountInput.value = "";
     saleDateInput.value = todayISO;
     $('input[name="saleStatus"][value="paid"]').checked = true;
-    showMessage(saleMessage, "Venta guardada.");
+    showMessage(saleMessage, "Venta guardada e inventario actualizado.");
   } catch (error) {
     console.error(error);
-    showMessage(saleMessage, "No se pudo guardar la venta.", "error");
+    if (error?.message === "INSUFFICIENT_STOCK") {
+      showMessage(saleMessage, "No hay suficientes unidades disponibles.", "error");
+    } else {
+      showMessage(saleMessage, "No se pudo guardar la venta.", "error");
+    }
   } finally {
     saveSaleButton.disabled = false;
   }
@@ -621,6 +787,12 @@ cashFlowAmountInput.addEventListener("blur", () => formatAmountInput(cashFlowAmo
 
 
 saveBusinessPurchaseButton.addEventListener("click", saveBusinessPurchase);
+saveInventoryProductButton.addEventListener("click", addInventoryProduct);
+inventoryList.addEventListener("click", event => {
+  const button = event.target.closest("[data-inventory-change]");
+  if (!button) return;
+  changeInventoryQuantity(button.dataset.productId, Number(button.dataset.inventoryChange));
+});
 $("#closePaymentPanel").addEventListener("click", closePaymentPanel);
 $("#closeClientDetail").addEventListener("click", closeClientDetail);
 $("#detailRegisterPayment").addEventListener("click", () => {
@@ -666,9 +838,10 @@ let salesReady = false;
 let paymentsReady = false;
 let businessPurchasesReady = false;
 let cashFlowReady = false;
+let inventoryReady = false;
 
 function updateConnectionState() {
-  if (salesReady && paymentsReady && businessPurchasesReady && cashFlowReady) {
+  if (salesReady && paymentsReady && businessPurchasesReady && cashFlowReady && inventoryReady) {
     connectionStatus.textContent = "Sincronizado";
     connectionStatus.classList.remove("error");
   }
@@ -697,6 +870,18 @@ onSnapshot(paymentsRef, snapshot => {
 });
 
 
+
+
+onSnapshot(inventoryRef, snapshot => {
+  inventory = snapshot.docs.map(document => ({ id: document.id, ...document.data() }));
+  inventoryReady = true;
+  updateConnectionState();
+  render();
+}, error => {
+  console.error(error);
+  connectionStatus.textContent = "Error de conexión";
+  connectionStatus.classList.add("error");
+});
 
 onSnapshot(cashFlowRef, snapshot => {
   manualCashFlow = snapshot.exists() ? Number(snapshot.data().amount) || 0 : 0;

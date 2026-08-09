@@ -753,3 +753,124 @@ dialog::backdrop { background: rgba(46, 16, 101, .38); }
 #cashFlowDialog::backdrop {
   background: rgba(31, 20, 51, .42);
 }
+
+
+.form-panel select {
+  width: 100%;
+  min-height: 50px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: white;
+  color: var(--text);
+  padding: 0 14px;
+  font: inherit;
+}
+
+.field-hint {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: .76rem;
+}
+
+.inventory-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.inventory-summary article {
+  padding: 16px;
+  border: 1px solid #ddd6fe;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.inventory-summary span,
+.inventory-summary strong {
+  display: block;
+}
+
+.inventory-summary span {
+  color: var(--muted);
+  font-size: .78rem;
+}
+
+.inventory-summary strong {
+  margin-top: 5px;
+  color: var(--purple-800);
+  font-size: 1.45rem;
+}
+
+.inventory-list {
+  display: grid;
+  gap: 10px;
+}
+
+.inventory-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.inventory-item strong,
+.inventory-item small {
+  display: block;
+}
+
+.inventory-item small {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.inventory-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inventory-controls button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid #ddd6fe;
+  border-radius: 11px;
+  background: #faf5ff;
+  color: var(--purple-800);
+  font-size: 1.15rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.inventory-controls span {
+  min-width: 32px;
+  text-align: center;
+  font-weight: 900;
+  color: var(--purple-950);
+}
+
+.bottom-nav {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.bottom-nav .nav-button {
+  font-size: .62rem;
+  padding-left: 3px;
+  padding-right: 3px;
+}
+
+@media (max-width: 520px) {
+  .inventory-item {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-controls {
+    justify-content: flex-end;
+  }
+}

@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#7c3aed">
   <meta name="description" content="Control sencillo de ventas, clientes y cuentas por cobrar.">
   <title>Control de Ventas</title>
-  <link rel="manifest" href="./manifest.webmanifest?v=6">
+  <link rel="manifest" href="./manifest.webmanifest?v=8">
   <link rel="icon" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
-  <link rel="stylesheet" href="./styles.css?v=6">
+  <link rel="stylesheet" href="./styles.css?v=8">
 </head>
 <body>
   <main class="app-shell">
@@ -70,6 +70,10 @@
           <span class="quick-icon">📦</span>
           <span>Compra para el negocio</span>
         </button>
+        <button class="quick-action" data-go="inventory">
+          <span class="quick-icon">🧺</span>
+          <span>Inventario</span>
+        </button>
       </div>
 
       <section class="panel">
@@ -99,11 +103,19 @@
 
         <label>
           <span>Artículo</span>
-          <input id="article" type="text" maxlength="120" placeholder="Ej. Crema Karsell">
+          <select id="article" required>
+            <option value="">Seleccionar artículo…</option>
+          </select>
+          <small id="articleStockHint" class="field-hint">Agrega productos desde Inventario.</small>
         </label>
 
         <label>
-          <span>Monto</span>
+          <span>Cantidad</span>
+          <input id="saleQuantity" type="number" inputmode="numeric" min="1" step="1" placeholder="1">
+        </label>
+
+        <label>
+          <span>Monto total</span>
           <div class="money-input">
             <span>₡</span>
             <input id="saleAmount" type="text" inputmode="numeric" placeholder="0">
@@ -168,6 +180,51 @@
 
         <button id="saveBusinessPurchaseButton" class="primary-button" type="button">Guardar compra</button>
         <p id="businessPurchaseMessage" class="form-message" aria-live="polite"></p>
+      </section>
+    </section>
+
+
+    <section id="view-inventory" class="view" aria-labelledby="inventoryTitle">
+      <div class="section-heading">
+        <div>
+          <h2 id="inventoryTitle">Inventario</h2>
+          <p>Agrega productos y controla las unidades disponibles.</p>
+        </div>
+      </div>
+
+      <div class="inventory-summary">
+        <article>
+          <span>Productos disponibles</span>
+          <strong id="inventoryProductCount">0</strong>
+        </article>
+        <article>
+          <span>Unidades totales</span>
+          <strong id="inventoryUnitCount">0</strong>
+        </article>
+      </div>
+
+      <section class="panel form-panel">
+        <label>
+          <span>Nombre del producto</span>
+          <input id="inventoryProductName" type="text" maxlength="120" placeholder="Ej. Mascarilla Karsell">
+        </label>
+
+        <label>
+          <span>Cantidad inicial</span>
+          <input id="inventoryProductQuantity" type="number" inputmode="numeric" min="1" step="1" placeholder="1">
+        </label>
+
+        <button id="saveInventoryProductButton" class="primary-button" type="button">Agregar producto</button>
+        <p id="inventoryMessage" class="form-message" aria-live="polite"></p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">
+          <h3>Productos activos</h3>
+        </div>
+        <div id="inventoryList" class="inventory-list">
+          <p class="empty-state">Todavía no hay productos disponibles.</p>
+        </div>
       </section>
     </section>
 
@@ -305,6 +362,7 @@
     <button class="nav-button active" data-view="home" type="button"><span>⌂</span>Inicio</button>
     <button class="nav-button" data-view="sale" type="button"><span>＋</span>Venta</button>
     <button class="nav-button" data-view="business-purchase" type="button"><span>📦</span>Compra</button>
+    <button class="nav-button" data-view="inventory" type="button"><span>🧺</span>Inventario</button>
     <button class="nav-button" data-view="debts" type="button"><span>👥</span>Cobros</button>
     <button class="nav-button" data-view="history" type="button"><span>≡</span>Histórico</button>
   </nav>
@@ -320,6 +378,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="./app.js?v=6"></script>
+  <script type="module" src="./app.js?v=8"></script>
 </body>
 </html>

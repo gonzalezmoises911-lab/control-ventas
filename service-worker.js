@@ -1,4 +1,4 @@
-const CACHE_NAME = "control-ventas-v6-fix3";
+const CACHE_NAME = "control-ventas-v8-inventario";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -10,7 +10,11 @@ const APP_SHELL = [
 ];
 
 self.addEventListener("install", event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(APP_SHELL))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", event => {
