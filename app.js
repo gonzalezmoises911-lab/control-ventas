@@ -37,6 +37,8 @@ let selectedPaymentClient = null;
 let selectedDetailClient = null;
 let historyType = "all";
 let pendingDelete = null;
+let editingCreditSaleId = null;
+let editingPaymentId = null;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -83,6 +85,22 @@ const clientPaidTotal = $("#clientPaidTotal");
 const clientPendingTotal = $("#clientPendingTotal");
 const clientSalesHistory = $("#clientSalesHistory");
 const clientPaymentsHistory = $("#clientPaymentsHistory");
+const editCreditSaleDialog = $("#editCreditSaleDialog");
+const editSaleClientNameInput = $("#editSaleClientName");
+const editSaleProductInput = $("#editSaleProduct");
+const editSaleProductHint = $("#editSaleProductHint");
+const editSaleQuantityInput = $("#editSaleQuantity");
+const editSaleAmountInput = $("#editSaleAmount");
+const editSaleDateInput = $("#editSaleDate");
+const editSaleMessage = $("#editSaleMessage");
+const saveEditSaleButton = $("#saveEditSaleButton");
+const cancelEditSaleButton = $("#cancelEditSaleButton");
+const editPaymentDialog = $("#editPaymentDialog");
+const editPaymentAmountInput = $("#editPaymentAmount");
+const editPaymentDateInput = $("#editPaymentDate");
+const editPaymentMessage = $("#editPaymentMessage");
+const saveEditPaymentButton = $("#saveEditPaymentButton");
+const cancelEditPaymentButton = $("#cancelEditPaymentButton");
 
 const today = new Date();
 const todayISO = toISODate(today);
@@ -483,32 +501,262 @@ function openClientDetail(debtor) {
 
   clientSalesHistory.innerHTML = creditSales.length
     ? creditSales.map(item => `
-        <article class="detail-row">
+        <article class="detail-row detail-row-with-actions">
           <div>
             <strong>${escapeHTML(item.article)}</strong>
             <small>${item.quantity ? `${item.quantity} ${Number(item.quantity) === 1 ? "unidad" : "unidades"} · ` : ""}${formatDate(item.date)}</small>
           </div>
-          <span class="detail-amount">${formatCurrency(item.amount)}</span>
+          <div>
+            <span class="detail-amount">${formatCurrency(item.amount)}</span>
+            <div class="detail-actions">
+              <button type="button" class="detail-edit-button edit-credit-sale" data-sale-id="${escapeAttr(item.id)}">Editar</button>
+            </div>
+          </div>
         </article>
       `).join("")
     : '<p class="empty-state">No hay compras a crédito.</p>';
 
   clientPaymentsHistory.innerHTML = clientPayments.length
     ? clientPayments.map(item => `
-        <article class="detail-row payment">
+        <article class="detail-row payment detail-row-with-actions">
           <div>
             <strong>Pago recibido</strong>
             <small>${formatDate(item.date)}</small>
           </div>
-          <span class="detail-amount">+${formatCurrency(item.amount)}</span>
+          <div>
+            <span class="detail-amount">+${formatCurrency(item.amount)}</span>
+            <div class="detail-actions">
+              <button type="button" class="detail-edit-button edit-client-payment" data-payment-id="${escapeAttr(item.id)}">Editar</button>
+            </div>
+          </div>
         </article>
       `).join("")
     : '<p class="empty-state">Todavía no ha realizado pagos.</p>';
+
+  clientSalesHistory.querySelectorAll(".edit-credit-sale").forEach(button => {
+    button.addEventListener("click", () => openEditCreditSale(button.dataset.saleId));
+  });
+
+  clientPaymentsHistory.querySelectorAll(".edit-client-payment").forEach(button => {
+    button.addEventListener("click", () => openEditPayment(button.dataset.paymentId));
+  });
 
   paymentPanel.classList.add("hidden");
   clientDetailPanel.classList.remove("hidden");
   clientDetailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+
+function fillEditSaleProductOptions(sale) {
+  const items = [...inventory].sort((a, b) => a.name.localeCompare(b.name, "es"));
+  const hasCurrent = sale.productId && items.some(item => item.id === sale.productId);
+
+  editSaleProductInput.innerHTML = items
+    .map(item => `<option value="${escapeAttr(item.id)}">${escapeHTML(item.name)} — ${item.quantity} disponibles</option>`)
+    .join("");
+
+  if (sale.productId && hasCurrent) {
+    editSaleProductInput.value = sale.productId;
+    editSaleProductInput.disabled = false;
+    editSaleQuantityInput.disabled = false;
+    editSaleProductHint.textContent = "El inventario se ajustará automáticamente.";
+  } else {
+    const legacyOption = document.createElement("option");
+    legacyOption.value = "";
+    legacyOption.textContent = `${sale.article} — venta anterior`;
+    legacyOption.selected = true;
+    editSaleProductInput.prepend(legacyOption);
+    editSaleProductInput.disabled = true;
+    editSaleQuantityInput.disabled = true;
+    editSaleProductHint.textContent = "Esta venta es anterior al inventario. Puedes corregir cliente, monto y fecha.";
+  }
+}
+
+function openEditCreditSale(saleId) {
+  const sale = sales.find(item => item.id === saleId && item.status === "credit");
+  if (!sale) return;
+
+  editingCreditSaleId = sale.id;
+  fillEditSaleProductOptions(sale);
+  editSaleClientNameInput.value = sale.clientName || "";
+  editSaleQuantityInput.value = sale.quantity || "";
+  editSaleAmountInput.value = new Intl.NumberFormat("es-CR").format(Number(sale.amount) || 0);
+  editSaleDateInput.value = sale.date || todayISO;
+  showMessage(editSaleMessage, "");
+  editCreditSaleDialog.showModal();
+}
+
+async function saveEditedCreditSale() {
+  const sale = sales.find(item => item.id === editingCreditSaleId);
+  if (!sale) return;
+
+  const newClientName = normalizeClientName(editSaleClientNameInput.value);
+  const newAmount = parseAmount(editSaleAmountInput.value);
+  const newDate = editSaleDateInput.value;
+
+  if (!newClientName || !newAmount || !newDate) {
+    showMessage(editSaleMessage, "Completa cliente, monto y fecha.", "error");
+    return;
+  }
+
+  saveEditSaleButton.disabled = true;
+
+  try {
+    const saleRef = doc(db, "ventas", sale.id);
+
+    if (!sale.productId || !sale.quantity) {
+      await runTransaction(db, async transaction => {
+        const saleSnapshot = await transaction.get(saleRef);
+        if (!saleSnapshot.exists()) throw new Error("SALE_NOT_FOUND");
+
+        transaction.update(saleRef, {
+          clientName: newClientName,
+          clientKey: clientKey(newClientName),
+          amount: newAmount,
+          date: newDate
+        });
+      });
+    } else {
+      const newProductId = editSaleProductInput.value;
+      const newQuantity = Number.parseInt(editSaleQuantityInput.value, 10);
+
+      if (!newProductId || !Number.isInteger(newQuantity) || newQuantity <= 0) {
+        showMessage(editSaleMessage, "Selecciona el artículo y una cantidad válida.", "error");
+        saveEditSaleButton.disabled = false;
+        return;
+      }
+
+      const oldProductRef = doc(db, "inventario", sale.productId);
+      const newProductRef = doc(db, "inventario", newProductId);
+
+      await runTransaction(db, async transaction => {
+        const saleSnapshot = await transaction.get(saleRef);
+        const oldProductSnapshot = await transaction.get(oldProductRef);
+        const newProductSnapshot = newProductId === sale.productId
+          ? oldProductSnapshot
+          : await transaction.get(newProductRef);
+
+        if (!saleSnapshot.exists()) throw new Error("SALE_NOT_FOUND");
+        if (!oldProductSnapshot.exists() || !newProductSnapshot.exists()) throw new Error("PRODUCT_NOT_FOUND");
+
+        const oldQuantity = Number(saleSnapshot.data().quantity) || Number(sale.quantity) || 0;
+        const oldStock = Number(oldProductSnapshot.data().quantity) || 0;
+        const newStock = Number(newProductSnapshot.data().quantity) || 0;
+
+        if (newProductId === sale.productId) {
+          const available = oldStock + oldQuantity;
+          if (newQuantity > available) throw new Error("INSUFFICIENT_STOCK");
+
+          transaction.update(oldProductRef, {
+            quantity: available - newQuantity,
+            updatedAt: serverTimestamp()
+          });
+        } else {
+          if (newQuantity > newStock) throw new Error("INSUFFICIENT_STOCK");
+
+          transaction.update(oldProductRef, {
+            quantity: oldStock + oldQuantity,
+            updatedAt: serverTimestamp()
+          });
+
+          transaction.update(newProductRef, {
+            quantity: newStock - newQuantity,
+            updatedAt: serverTimestamp()
+          });
+        }
+
+        transaction.update(saleRef, {
+          clientName: newClientName,
+          clientKey: clientKey(newClientName),
+          productId: newProductId,
+          article: newProductSnapshot.data().name,
+          quantity: newQuantity,
+          amount: newAmount,
+          date: newDate
+        });
+      });
+    }
+
+    editCreditSaleDialog.close();
+    showMessage(editSaleMessage, "");
+  } catch (error) {
+    console.error(error);
+    if (error?.message === "INSUFFICIENT_STOCK") {
+      showMessage(editSaleMessage, "No hay suficientes unidades disponibles.", "error");
+    } else {
+      const detail = error?.code ? ` (${error.code})` : "";
+      showMessage(editSaleMessage, `No se pudo actualizar la compra${detail}.`, "error");
+    }
+  } finally {
+    saveEditSaleButton.disabled = false;
+  }
+}
+
+function openEditPayment(paymentId) {
+  const payment = payments.find(item => item.id === paymentId);
+  if (!payment) return;
+
+  editingPaymentId = payment.id;
+  editPaymentAmountInput.value = new Intl.NumberFormat("es-CR").format(Number(payment.amount) || 0);
+  editPaymentDateInput.value = payment.date || todayISO;
+  showMessage(editPaymentMessage, "");
+  editPaymentDialog.showModal();
+}
+
+async function saveEditedPayment() {
+  const payment = payments.find(item => item.id === editingPaymentId);
+  if (!payment) return;
+
+  const amount = parseAmount(editPaymentAmountInput.value);
+  const date = editPaymentDateInput.value;
+
+  if (!amount || !date) {
+    showMessage(editPaymentMessage, "Completa el monto y la fecha.", "error");
+    return;
+  }
+
+  const clientCredit = sales
+    .filter(item => item.status === "credit" && item.clientKey === payment.clientKey)
+    .reduce((sum, item) => sum + Number(item.amount), 0);
+
+  const otherPayments = payments
+    .filter(item => item.clientKey === payment.clientKey && item.id !== payment.id)
+    .reduce((sum, item) => sum + Number(item.amount), 0);
+
+  if (amount > Math.max(0, clientCredit - otherPayments)) {
+    showMessage(editPaymentMessage, "El pago supera la deuda pendiente.", "error");
+    return;
+  }
+
+  saveEditPaymentButton.disabled = true;
+
+  try {
+    await runTransaction(db, async transaction => {
+      const paymentRef = doc(db, "pagos", payment.id);
+      const snapshot = await transaction.get(paymentRef);
+      if (!snapshot.exists()) throw new Error("PAYMENT_NOT_FOUND");
+
+      transaction.update(paymentRef, { amount, date });
+    });
+
+    editPaymentDialog.close();
+    showMessage(editPaymentMessage, "");
+  } catch (error) {
+    console.error(error);
+    const detail = error?.code ? ` (${error.code})` : "";
+    showMessage(editPaymentMessage, `No se pudo actualizar el pago${detail}.`, "error");
+  } finally {
+    saveEditPaymentButton.disabled = false;
+  }
+}
+
+saveEditSaleButton.addEventListener("click", saveEditedCreditSale);
+cancelEditSaleButton.addEventListener("click", () => editCreditSaleDialog.close());
+editSaleAmountInput.addEventListener("blur", () => formatAmountInput(editSaleAmountInput));
+
+saveEditPaymentButton.addEventListener("click", saveEditedPayment);
+cancelEditPaymentButton.addEventListener("click", () => editPaymentDialog.close());
+editPaymentAmountInput.addEventListener("blur", () => formatAmountInput(editPaymentAmountInput));
 
 function closeClientDetail() {
   selectedDetailClient = null;

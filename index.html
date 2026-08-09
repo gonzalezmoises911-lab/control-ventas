@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#7c3aed">
   <meta name="description" content="Control sencillo de ventas, clientes y cuentas por cobrar.">
   <title>Control de Ventas</title>
-  <link rel="manifest" href="./manifest.webmanifest?v=8">
+  <link rel="manifest" href="./manifest.webmanifest?v=9">
   <link rel="icon" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
-  <link rel="stylesheet" href="./styles.css?v=8">
+  <link rel="stylesheet" href="./styles.css?v=9">
 </head>
 <body>
   <main class="app-shell">
@@ -367,6 +367,79 @@
     <button class="nav-button" data-view="history" type="button"><span>≡</span>Histórico</button>
   </nav>
 
+
+  <dialog id="editCreditSaleDialog">
+    <form method="dialog" class="dialog-card edit-dialog-card">
+      <h2>Editar compra a crédito</h2>
+
+      <label>
+        <span>Nombre del cliente</span>
+        <input id="editSaleClientName" type="text" maxlength="100">
+      </label>
+
+      <label>
+        <span>Artículo</span>
+        <select id="editSaleProduct"></select>
+        <small id="editSaleProductHint" class="field-hint"></small>
+      </label>
+
+      <label>
+        <span>Cantidad</span>
+        <input id="editSaleQuantity" type="number" inputmode="numeric" min="1" step="1">
+      </label>
+
+      <label>
+        <span>Monto total</span>
+        <div class="money-input">
+          <span>₡</span>
+          <input id="editSaleAmount" type="text" inputmode="numeric">
+        </div>
+      </label>
+
+      <label>
+        <span>Fecha</span>
+        <div class="date-wrap">
+          <input id="editSaleDate" type="date">
+        </div>
+      </label>
+
+      <p id="editSaleMessage" class="form-message" aria-live="polite"></p>
+
+      <div class="dialog-actions">
+        <button id="cancelEditSaleButton" type="button" class="secondary-button">Cancelar</button>
+        <button id="saveEditSaleButton" type="button" class="primary-button">Guardar cambios</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="editPaymentDialog">
+    <form method="dialog" class="dialog-card edit-dialog-card">
+      <h2>Editar pago</h2>
+
+      <label>
+        <span>Monto recibido</span>
+        <div class="money-input">
+          <span>₡</span>
+          <input id="editPaymentAmount" type="text" inputmode="numeric">
+        </div>
+      </label>
+
+      <label>
+        <span>Fecha</span>
+        <div class="date-wrap">
+          <input id="editPaymentDate" type="date">
+        </div>
+      </label>
+
+      <p id="editPaymentMessage" class="form-message" aria-live="polite"></p>
+
+      <div class="dialog-actions">
+        <button id="cancelEditPaymentButton" type="button" class="secondary-button">Cancelar</button>
+        <button id="saveEditPaymentButton" type="button" class="primary-button">Guardar cambios</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="confirmDialog">
     <form method="dialog" class="dialog-card">
       <h3>Eliminar registro</h3>
@@ -378,6 +451,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="./app.js?v=8"></script>
+  <script type="module" src="./app.js?v=9"></script>
 </body>
 </html>
