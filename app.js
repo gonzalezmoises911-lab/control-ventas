@@ -7,7 +7,8 @@ import {
   doc,
   onSnapshot,
   serverTimestamp,
-  runTransaction
+  runTransaction,
+  setDoc
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -600,11 +601,9 @@ async function saveManualCashFlow() {
 
   saveCashFlowButton.disabled = true;
   try {
-    await runTransaction(db, async transaction => {
-      transaction.set(cashFlowRef, {
-        amount,
-        updatedAt: serverTimestamp()
-      });
+    await setDoc(cashFlowRef, {
+      amount,
+      updatedAt: serverTimestamp()
     });
     cashFlowDialog.close();
   } catch (error) {
