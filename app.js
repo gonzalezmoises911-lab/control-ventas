@@ -602,13 +602,13 @@ async function saveManualCashFlow() {
   saveCashFlowButton.disabled = true;
   try {
     await setDoc(cashFlowRef, {
-      amount,
-      updatedAt: serverTimestamp()
+      amount
     });
     cashFlowDialog.close();
   } catch (error) {
-    console.error(error);
-    showMessage(cashFlowMessage, "No se pudo guardar el flujo de caja.", "error");
+    console.error("Error guardando flujo de caja:", error);
+    const detail = error?.code ? ` (${error.code})` : "";
+    showMessage(cashFlowMessage, `No se pudo guardar el flujo de caja${detail}.`, "error");
   } finally {
     saveCashFlowButton.disabled = false;
   }
