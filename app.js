@@ -22,9 +22,11 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const salesRef = collection(db, "ventas");
 const paymentsRef = collection(db, "pagos");
+const businessPurchasesRef = collection(db, "compras_negocio");
 
 let sales = [];
 let payments = [];
+let businessPurchases = [];
 let selectedPaymentClient = null;
 let selectedDetailClient = null;
 let historyType = "all";
@@ -48,6 +50,11 @@ const paymentAmountInput = $("#paymentAmount");
 const paymentDateInput = $("#paymentDate");
 const savePaymentButton = $("#savePaymentButton");
 const paymentMessage = $("#paymentMessage");
+const businessPurchaseDescriptionInput = $("#businessPurchaseDescription");
+const businessPurchaseAmountInput = $("#businessPurchaseAmount");
+const businessPurchaseDateInput = $("#businessPurchaseDate");
+const saveBusinessPurchaseButton = $("#saveBusinessPurchaseButton");
+const businessPurchaseMessage = $("#businessPurchaseMessage");
 const confirmDialog = $("#confirmDialog");
 const clientDetailPanel = $("#clientDetailPanel");
 const clientDetailName = $("#clientDetailName");
@@ -65,6 +72,7 @@ monthFilter.value = currentMonth;
 historyMonthFilter.value = currentMonth;
 saleDateInput.value = todayISO;
 paymentDateInput.value = todayISO;
+businessPurchaseDateInput.value = todayISO;
 
 function toISODate(date) {
   const year = date.getFullYear();
@@ -158,17 +166,24 @@ function calculateDebtors() {
 
 function calculateMonthSummary(month) {
   const monthSales = sales.filter(item => monthMatches(item.date, month));
-  const monthPayments = payments.filter(item => monthMatches(item.date, month));
+  const monthBusinessPurchases = businessPurchases.filter(item => monthMatches(item.date, month));
   const totalSales = monthSales.reduce((sum, item) => sum + Number(item.amount), 0);
-  const paidSales = monthSales
-    .filter(item => item.status === "paid")
-    .reduce((sum, item) => sum + Number(item.amount), 0);
-  const receivedPayments = monthPayments.reduce((sum, item) => sum + Number(item.amount), 0);
+  const totalBusinessPurchases = monthBusinessPurchases.reduce((sum, item) => sum + Number(item.amount), 0);
+
   return {
     totalSales,
     salesCount: monthSales.length,
-    collected: paidSales + receivedPayments
+    totalBusinessPurchases
   };
+}
+
+function calculateCashFlow() {
+  const paidSales = sales
+    .filter(item => item.status === "paid")
+    .reduce((sum, item) => sum + Number(item.amount), 0);
+  const receivedPayments = payments.reduce((sum, item) => sum + Number(item.amount), 0);
+  const purchases = businessPurchases.reduce((sum, item) => sum + Number(item.amount), 0);
+  return paidSales + receivedPayments - purchases;
 }
 
 function allMovements() {
@@ -182,7 +197,13 @@ function allMovements() {
     kind: "payment",
     sortTime: timestampMillis(item)
   }));
-  return [...saleMovements, ...paymentMovements].sort((a, b) => b.sortTime - a.sortTime);
+  const purchaseMovements = businessPurchases.map(item => ({
+    ...item,
+    kind: "business_purchase",
+    sortTime: timestampMillis(item)
+  }));
+  return [...saleMovements, ...paymentMovements, ...purchaseMovements]
+    .sort((a, b) => b.sortTime - a.sortTime);
 }
 
 function render() {
@@ -192,7 +213,8 @@ function render() {
 
   $("#monthSales").textContent = formatCurrency(summary.totalSales);
   $("#monthSalesCount").textContent = `${summary.salesCount} ${summary.salesCount === 1 ? "venta" : "ventas"}`;
-  $("#monthCollected").textContent = formatCurrency(summary.collected);
+  $("#monthBusinessPurchases").textContent = formatCurrency(summary.totalBusinessPurchases);
+  $("#cashFlow").textContent = formatCurrency(calculateCashFlow());
   $("#currentDebt").textContent = formatCurrency(totalDebt);
   $("#debtClientCount").textContent = `${debtors.length} ${debtors.length === 1 ? "cliente" : "clientes"}`;
   $("#debtTotalTop").textContent = formatCurrency(totalDebt);
@@ -225,16 +247,26 @@ function renderRecent() {
 
 function movementHTML(item, showDelete = true) {
   const isPayment = item.kind === "payment";
+  const isBusinessPurchase = item.kind === "business_purchase";
   const isPaidSale = item.kind === "sale" && item.status === "paid";
-  const title = isPayment ? `Pago de ${escapeHTML(item.clientName)}` : escapeHTML(item.clientName);
+
+  const title = isPayment
+    ? `Pago de ${escapeHTML(item.clientName)}`
+    : isBusinessPurchase
+      ? escapeHTML(item.description)
+      : escapeHTML(item.clientName);
+
   const subtitle = isPayment
     ? `Pago recibido · ${formatDate(item.date)}`
-    : `${escapeHTML(item.article)} · ${item.status === "paid" ? "Pagado" : "A crédito"} · ${formatDate(item.date)}`;
-  const amountClass = isPayment || isPaidSale ? "paid" : "debt";
-  const amountPrefix = isPayment || isPaidSale ? "+" : "";
-  const icon = isPayment ? "✓" : (isPaidSale ? "$" : "◷");
+    : isBusinessPurchase
+      ? `Compra para el negocio · ${formatDate(item.date)}`
+      : `${escapeHTML(item.article)} · ${item.status === "paid" ? "Pagado" : "A crédito"} · ${formatDate(item.date)}`;
+
+  const amountClass = isBusinessPurchase ? "debt" : (isPayment || isPaidSale ? "paid" : "debt");
+  const amountPrefix = isBusinessPurchase ? "−" : (isPayment || isPaidSale ? "+" : "");
+  const icon = isBusinessPurchase ? "📦" : (isPayment ? "✓" : (isPaidSale ? "$" : "◷"));
   const iconClass = isPayment || isPaidSale ? "paid" : "";
-  const collectionName = isPayment ? "pagos" : "ventas";
+  const collectionName = isBusinessPurchase ? "compras_negocio" : (isPayment ? "pagos" : "ventas");
 
   return `
     <article class="list-item">
@@ -350,6 +382,7 @@ function renderHistory() {
   let items = allMovements().filter(item => monthMatches(item.date, month));
   if (historyType === "sales") items = items.filter(item => item.kind === "sale");
   if (historyType === "payments") items = items.filter(item => item.kind === "payment");
+  if (historyType === "purchases") items = items.filter(item => item.kind === "business_purchase");
 
   if (!items.length) {
     container.innerHTML = '<p class="empty-state">No hay movimientos en este período.</p>';
@@ -378,6 +411,7 @@ function openPaymentPanel(debtor) {
   paymentClientLabel.textContent = `${debtor.clientName} · Debe ${formatCurrency(debtor.debt)}`;
   paymentAmountInput.value = "";
   paymentDateInput.value = todayISO;
+businessPurchaseDateInput.value = todayISO;
   paymentMessage.textContent = "";
   paymentPanel.classList.remove("hidden");
   paymentPanel.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -473,6 +507,42 @@ async function savePayment() {
   }
 }
 
+async function saveBusinessPurchase() {
+  const description = businessPurchaseDescriptionInput.value.trim();
+  const amount = parseAmount(businessPurchaseAmountInput.value);
+  const date = businessPurchaseDateInput.value;
+
+  if (!description || !amount || !date) {
+    showMessage(businessPurchaseMessage, "Completa todos los datos.", "error");
+    return;
+  }
+
+  const availableCash = calculateCashFlow();
+  if (amount > availableCash) {
+    showMessage(businessPurchaseMessage, "Flujo de caja insuficiente.", "error");
+    return;
+  }
+
+  saveBusinessPurchaseButton.disabled = true;
+  try {
+    await addDoc(businessPurchasesRef, {
+      description,
+      amount,
+      date,
+      createdAt: serverTimestamp()
+    });
+    businessPurchaseDescriptionInput.value = "";
+    businessPurchaseAmountInput.value = "";
+    businessPurchaseDateInput.value = todayISO;
+    showMessage(businessPurchaseMessage, "Compra guardada.");
+  } catch (error) {
+    console.error(error);
+    showMessage(businessPurchaseMessage, "No se pudo guardar la compra.", "error");
+  } finally {
+    saveBusinessPurchaseButton.disabled = false;
+  }
+}
+
 function escapeHTML(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -488,6 +558,7 @@ function escapeAttr(value) {
 
 saveSaleButton.addEventListener("click", saveSale);
 savePaymentButton.addEventListener("click", savePayment);
+saveBusinessPurchaseButton.addEventListener("click", saveBusinessPurchase);
 $("#closePaymentPanel").addEventListener("click", closePaymentPanel);
 $("#closeClientDetail").addEventListener("click", closeClientDetail);
 $("#detailRegisterPayment").addEventListener("click", () => {
@@ -496,6 +567,7 @@ $("#detailRegisterPayment").addEventListener("click", () => {
 
 saleAmountInput.addEventListener("blur", () => formatAmountInput(saleAmountInput));
 paymentAmountInput.addEventListener("blur", () => formatAmountInput(paymentAmountInput));
+businessPurchaseAmountInput.addEventListener("blur", () => formatAmountInput(businessPurchaseAmountInput));
 
 monthFilter.addEventListener("change", render);
 historyMonthFilter.addEventListener("change", renderHistory);
@@ -530,9 +602,10 @@ $("#confirmDeleteButton").addEventListener("click", async (event) => {
 
 let salesReady = false;
 let paymentsReady = false;
+let businessPurchasesReady = false;
 
 function updateConnectionState() {
-  if (salesReady && paymentsReady) {
+  if (salesReady && paymentsReady && businessPurchasesReady) {
     connectionStatus.textContent = "Sincronizado";
     connectionStatus.classList.remove("error");
   }
@@ -560,8 +633,72 @@ onSnapshot(paymentsRef, snapshot => {
   connectionStatus.classList.add("error");
 });
 
+
+onSnapshot(businessPurchasesRef, snapshot => {
+  businessPurchases = snapshot.docs.map(document => ({ id: document.id, ...document.data() }));
+  businessPurchasesReady = true;
+  updateConnectionState();
+  render();
+}, error => {
+  console.error(error);
+  connectionStatus.textContent = "Error de conexión";
+  connectionStatus.classList.add("error");
+});
+
+function showAppUpdate(worker) {
+  let banner = document.querySelector("#appUpdateBanner");
+
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "appUpdateBanner";
+    banner.style.cssText = "position:fixed;left:12px;right:12px;bottom:18px;z-index:9999;max-width:520px;margin:auto;padding:14px 15px;border-radius:16px;background:#fff;color:#2e1065;box-shadow:0 12px 35px rgba(46,16,101,.25);border:1px solid #ddd6fe;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;";
+    banner.innerHTML = '<div style="display:flex;align-items:center;gap:12px"><div style="flex:1"><strong style="display:block;font-size:15px">Nueva versión disponible</strong><span style="display:block;margin-top:2px;font-size:13px;color:#6b7280">Hay mejoras listas para instalar.</span></div><button id="appUpdateButton" type="button" style="border:0;border-radius:11px;padding:10px 14px;background:#7c3aed;color:#fff;font-weight:700">Actualizar</button></div>';
+    document.body.appendChild(banner);
+  }
+
+  const button = banner.querySelector("#appUpdateButton");
+  button.onclick = () => {
+    button.disabled = true;
+    button.textContent = "Actualizando…";
+    worker.postMessage({ type: "SKIP_WAITING" });
+  };
+}
+
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js").catch(console.error);
+  let refreshing = false;
+
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
+
+  window.addEventListener("load", async () => {
+    try {
+      const registration = await navigator.serviceWorker.register("./service-worker.js", {
+        updateViaCache: "none"
+      });
+
+      if (registration.waiting && navigator.serviceWorker.controller) {
+        showAppUpdate(registration.waiting);
+      }
+
+      registration.addEventListener("updatefound", () => {
+        const worker = registration.installing;
+        if (!worker) return;
+        worker.addEventListener("statechange", () => {
+          if (worker.state === "installed" && navigator.serviceWorker.controller) {
+            showAppUpdate(worker);
+          }
+        });
+      });
+
+      await registration.update();
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") registration.update().catch(() => {});
+      });
+    } catch (error) {
+      console.error("No se pudo revisar actualizaciones:", error);
+    }
   });
 }

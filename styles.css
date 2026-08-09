@@ -686,3 +686,50 @@ dialog::backdrop { background: rgba(46, 16, 101, .38); }
     grid-template-columns: 1fr;
   }
 }
+
+
+.metrics-grid-four {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.metric-card.amber {
+  background: #fff8e7;
+  border-color: #fde7aa;
+  color: #92400e;
+}
+
+.metric-card.cash {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.quick-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.history-tabs {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.bottom-nav {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+@media (max-width: 520px) {
+  .metrics-grid-four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metric-card {
+    min-height: 126px;
+  }
+
+  .metric-card strong {
+    font-size: 1.28rem;
+  }
+
+  .history-tabs {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
