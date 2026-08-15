@@ -927,3 +927,23 @@ dialog::backdrop { background: rgba(46, 16, 101, .38); }
   background: #f3f4f6;
   color: #6b7280;
 }
+
+
+/* v10 — interfaz simplificada */
+.metrics-grid-simple {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.metrics-grid-simple .metric-card {
+  min-height: 132px;
+}
+
+.bottom-nav {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 520px) {
+  .metrics-grid-simple {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

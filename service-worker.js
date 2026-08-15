@@ -1,4 +1,4 @@
-const CACHE_NAME = "control-ventas-v9-editar-cuentas";
+const CACHE_NAME = "control-ventas-v10-simple";
 const APP_SHELL = [
   "./",
   "./index.html",

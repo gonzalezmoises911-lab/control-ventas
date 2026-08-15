@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#7c3aed">
   <meta name="description" content="Control sencillo de ventas, clientes y cuentas por cobrar.">
   <title>Control de Ventas</title>
-  <link rel="manifest" href="./manifest.webmanifest?v=9">
+  <link rel="manifest" href="./manifest.webmanifest?v=10">
   <link rel="icon" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
-  <link rel="stylesheet" href="./styles.css?v=9">
+  <link rel="stylesheet" href="./styles.css?v=10">
 </head>
 <body>
   <main class="app-shell">
@@ -33,27 +33,16 @@
         </label>
       </div>
 
-      <div class="metrics-grid metrics-grid-four">
+      <div class="metrics-grid metrics-grid-simple">
         <article class="metric-card purple">
           <span>Ventas del mes</span>
           <strong id="monthSales">₡0</strong>
           <small id="monthSalesCount">0 ventas</small>
         </article>
-        <article class="metric-card amber">
-          <span>Compras del mes</span>
-          <strong id="monthBusinessPurchases">₡0</strong>
-          <small>Mercadería y gastos</small>
-        </article>
         <article class="metric-card rose">
           <span>Cuentas por cobrar</span>
           <strong id="currentDebt">₡0</strong>
           <small id="debtClientCount">0 clientes</small>
-        </article>
-        <article class="metric-card cash">
-          <span>Flujo de caja</span>
-          <strong id="cashFlow">₡0</strong>
-          <small>Saldo manual acumulado</small>
-          <button id="adjustCashFlowButton" class="cash-adjust-button" type="button">Ajustar saldo</button>
         </article>
       </div>
 
@@ -65,10 +54,6 @@
         <button class="quick-action" data-go="debts">
           <span class="quick-icon">👥</span>
           <span>Cuentas por cobrar</span>
-        </button>
-        <button class="quick-action" data-go="business-purchase">
-          <span class="quick-icon">📦</span>
-          <span>Compra para el negocio</span>
         </button>
         <button class="quick-action" data-go="inventory">
           <span class="quick-icon">🧺</span>
@@ -147,42 +132,6 @@
         <p id="saleMessage" class="form-message" aria-live="polite"></p>
       </section>
     </section>
-
-
-    <section id="view-business-purchase" class="view" aria-labelledby="businessPurchaseTitle">
-      <div class="section-heading">
-        <div>
-          <h2 id="businessPurchaseTitle">Compra para el negocio</h2>
-          <p>Registra mercadería, empaques u otros gastos del negocio.</p>
-        </div>
-      </div>
-
-      <section class="panel form-panel">
-        <label>
-          <span>Descripción</span>
-          <input id="businessPurchaseDescription" type="text" maxlength="120" placeholder="Ej. Compra de mercadería">
-        </label>
-
-        <label>
-          <span>Monto</span>
-          <div class="money-input">
-            <span>₡</span>
-            <input id="businessPurchaseAmount" type="text" inputmode="numeric" placeholder="0">
-          </div>
-        </label>
-
-        <label>
-          <span>Fecha</span>
-          <div class="date-wrap">
-            <input id="businessPurchaseDate" type="date">
-          </div>
-        </label>
-
-        <button id="saveBusinessPurchaseButton" class="primary-button" type="button">Guardar compra</button>
-        <p id="businessPurchaseMessage" class="form-message" aria-live="polite"></p>
-      </section>
-    </section>
-
 
     <section id="view-inventory" class="view" aria-labelledby="inventoryTitle">
       <div class="section-heading">
@@ -329,7 +278,6 @@
         <button class="history-tab active" data-history="all" type="button">Todo</button>
         <button class="history-tab" data-history="sales" type="button">Ventas</button>
         <button class="history-tab" data-history="payments" type="button">Pagos</button>
-        <button class="history-tab" data-history="purchases" type="button">Compras</button>
       </div>
 
       <div id="historyList" class="list">
@@ -338,30 +286,9 @@
     </section>
   </main>
 
-
-  <dialog id="cashFlowDialog">
-    <form method="dialog" class="dialog-card" id="cashFlowForm">
-      <h2>Ajustar flujo de caja</h2>
-      <p>Escribe el saldo real que quieres mantener como flujo de caja.</p>
-      <label>
-        <span>Saldo</span>
-        <div class="money-input">
-          <span>₡</span>
-          <input id="cashFlowAmount" type="text" inputmode="numeric" placeholder="0">
-        </div>
-      </label>
-      <p id="cashFlowMessage" class="form-message" aria-live="polite"></p>
-      <div class="dialog-actions">
-        <button id="cancelCashFlowButton" type="button" class="secondary-button">Cancelar</button>
-        <button id="saveCashFlowButton" type="button" class="primary-button">Guardar saldo</button>
-      </div>
-    </form>
-  </dialog>
-
   <nav class="bottom-nav" aria-label="Navegación principal">
     <button class="nav-button active" data-view="home" type="button"><span>⌂</span>Inicio</button>
     <button class="nav-button" data-view="sale" type="button"><span>＋</span>Venta</button>
-    <button class="nav-button" data-view="business-purchase" type="button"><span>📦</span>Compra</button>
     <button class="nav-button" data-view="inventory" type="button"><span>🧺</span>Inventario</button>
     <button class="nav-button" data-view="debts" type="button"><span>👥</span>Cobros</button>
     <button class="nav-button" data-view="history" type="button"><span>≡</span>Histórico</button>
@@ -451,6 +378,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="./app.js?v=9"></script>
+  <script type="module" src="./app.js?v=10"></script>
 </body>
 </html>
