@@ -28,7 +28,81 @@ function renderHome(){const sm=sales.filter(x=>x.date?.startsWith(currentMonth))
 function renderSaleProducts(){const sel=$("#article");if(!sel)return;const old=sel.value,items=activeInventory();sel.innerHTML='<option value="">Seleccionar artículo…</option>'+items.map(x=>`<option value="${esc(x.id)}">${esc(x.name)} — ${x.quantity} disp.</option>`).join("");if(items.some(x=>x.id===old))sel.value=old;const h=$("#articleStockHint");if(h)h.textContent=items.length?"Selecciona un producto del inventario.":"Agrega productos desde Inventario."}
 async function saveSale(){const client=normName($("#clientName").value),pid=$("#article").value,prod=inventory.find(x=>x.id===pid),qty=Number.parseInt($("#saleQuantity").value,10),amount=parseAmount($("#saleAmount").value),date=$("#saleDate").value,status=$("input[name='saleStatus']:checked")?.value,out=$("#saleMessage");if(!client||!prod||!Number.isInteger(qty)||qty<=0||!amount||!date||!status){msg(out,"Completa cliente, artículo, cantidad, monto y fecha.",true);return}if(qty>Number(prod.quantity)){msg(out,`Solo hay ${prod.quantity} unidades disponibles.`,true);return}const btn=$("#saveSaleButton");btn.disabled=true;try{const saleDoc=doc(salesRef),productDoc=doc(db,"inventario",pid);await runTransaction(db,async t=>{const ps=await t.get(productDoc);if(!ps.exists())throw new Error("PRODUCT_NOT_FOUND");const stock=Number(ps.data().quantity)||0;if(qty>stock)throw new Error("INSUFFICIENT_STOCK");t.set(saleDoc,{clientName:client,clientKey:keyName(client),productId:pid,article:ps.data().name,quantity:qty,amount,status,date,createdAt:serverTimestamp()});t.update(productDoc,{quantity:stock-qty,updatedAt:serverTimestamp()})});$("#clientName").value="";$("#article").value="";$("#saleQuantity").value="";$("#saleAmount").value="";$("#saleDate").value=todayISO;$("input[name='saleStatus'][value='paid']").checked=true;msg(out,"Venta guardada e inventario actualizado.")}catch(e){console.error(e);msg(out,e.message==="INSUFFICIENT_STOCK"?"No hay suficientes unidades disponibles.":"No se pudo guardar la venta.",true)}finally{btn.disabled=false}}
 
-function renderInventory(){const items=activeInventory();$("#inventoryProductCount").textContent=String(items.length);$("#inventoryUnitCount").textContent=String(items.reduce((s,x)=>s+Number(x.quantity||0),0));const c=$("#inventoryList");c.innerHTML=items.length?items.map(x=>`<article class="inventory-item"><div><strong>${esc(x.name)}</strong><small>${x.quantity} ${Number(x.quantity)===1?"unidad disponible":"unidades disponibles"}</small></div><div class="stock"><button data-change="-1" data-id="${esc(x.id)}">−</button><strong>${x.quantity}</strong><button data-change="1" data-id="${esc(x.id)}">+</button></div></article>`).join(""):'<p class="empty">Todavía no hay productos disponibles.</p>'}
+function renderInventory(){const items=activeInventory();$("#inventoryProductCount").textContent=String(items.length);$("#inventoryUnitCount").textContent=String(items.reduce((s,x)=>s+Number(x.quantity||0),0));const c=$("#inventoryList");c.innerHTML=items.length?items.map(x=>`<article class="inventory-item"><div><strong>${esc(x.name)}</strong><small>${x.quantity} ${Number(x.quantity)===1?"unidad disponible":"unidades disponibles"}</small></div><div class="stock"><button type="button" data-change="-1" data-id="${esc(x.id)}" aria-label="Restar una unidad de ${esc(x.name)}">−</button><button type="button" class="stock-edit" data-edit-stock="${esc(x.id)}" aria-label="Editar cantidad de ${esc(x.name)}: ${x.quantity} unidades"><strong>${x.quantity}</strong><span>Editar</span></button><button type="button" data-change="1" data-id="${esc(x.id)}" aria-label="Sumar una unidad de ${esc(x.name)}">+</button></div></article>`).join(""):'<p class="empty">Todavía no hay productos disponibles.</p>'}
+
+let stockEdit=null,stockSaving=false;
+function openEditStock(id){
+  const product=inventory.find(x=>x.id===id);
+  if(!product)return;
+  stockEdit={id,quantity:Number(product.quantity)||0};
+  $("#editStockProductName").textContent=product.name;
+  $("#editStockCurrent").textContent=`Cantidad actual: ${stockEdit.quantity}`;
+  $("#editStockQuantity").value=String(stockEdit.quantity);
+  msg($("#editStockMessage"),"");
+  msg($("#stockMessage"),"");
+  $("#editStockDialog").showModal();
+  $("#editStockQuantity").focus();
+  $("#editStockQuantity").select();
+}
+async function saveStockQuantity(event){
+  event.preventDefault();
+  if(!stockEdit||stockSaving)return;
+  const raw=$("#editStockQuantity").value.trim(),quantity=Number(raw),out=$("#editStockMessage");
+  if(!/^\d+$/.test(raw)||!Number.isSafeInteger(quantity)){
+    msg(out,"Ingresá una cantidad entera de 0 o más, sin puntos ni comas.",true);
+    $("#editStockQuantity").focus();
+    return;
+  }
+  const edit={...stockEdit},button=$("#saveStockQuantityButton");
+  stockSaving=true;
+  button.disabled=true;
+  button.textContent="Guardando…";
+  $("#cancelEditStockButton").disabled=true;
+  $("#editStockQuantity").disabled=true;
+  msg(out,"");
+  try{
+    await runTransaction(db,async transaction=>{
+      const ref=doc(db,"inventario",edit.id),snapshot=await transaction.get(ref);
+      if(!snapshot.exists())throw new Error("PRODUCT_NOT_FOUND");
+      const current=Number(snapshot.data().quantity)||0;
+      if(current!==edit.quantity){
+        const error=new Error("STOCK_CHANGED");
+        error.quantity=current;
+        throw error;
+      }
+      transaction.update(ref,{quantity,updatedAt:serverTimestamp()});
+    });
+    $("#editStockDialog").close();
+    msg($("#stockMessage"),`Cantidad guardada: ${quantity} ${quantity===1?"unidad":"unidades"}.`);
+  }catch(error){
+    console.error(error);
+    if(error.message==="STOCK_CHANGED"){
+      stockEdit.quantity=error.quantity;
+      $("#editStockCurrent").textContent=`Cantidad actual: ${error.quantity}`;
+      msg(out,`La cantidad cambió a ${error.quantity} mientras editabas. Revisá el total antes de guardar de nuevo.`,true);
+    }else{
+      msg(out,error.message==="PRODUCT_NOT_FOUND"?"Este producto ya no existe. Cerrá esta ventana y revisá el inventario.":"No se pudo guardar la cantidad. Revisá tu conexión e intentá de nuevo.",true);
+    }
+  }finally{
+    stockSaving=false;
+    button.disabled=false;
+    button.textContent="Guardar cantidad";
+    $("#cancelEditStockButton").disabled=false;
+    $("#editStockQuantity").disabled=false;
+  }
+}
+function bindStockEditor(){
+  $("#inventoryList").onclick=event=>{
+    const edit=event.target.closest('[data-edit-stock]');
+    if(edit){openEditStock(edit.dataset.editStock);return}
+    const step=event.target.closest('[data-change]');
+    if(step)changeStock(step.dataset.id,Number(step.dataset.change));
+  };
+  $("#editStockForm").onsubmit=saveStockQuantity;
+  $("#cancelEditStockButton").onclick=()=>$("#editStockDialog").close();
+  $("#editStockDialog").addEventListener("cancel",event=>{if(stockSaving)event.preventDefault()});
+  $("#editStockDialog").addEventListener("close",()=>{stockEdit=null});
+}
 async function addProduct(){const name=normName($("#inventoryProductName").value),q=Number.parseInt($("#inventoryProductQuantity").value,10),out=$("#inventoryMessage");if(!name||!Number.isInteger(q)||q<=0){msg(out,"Completa el producto y una cantidad válida.",true);return}const n=keyName(name),existing=inventory.find(x=>x.normalizedName===n);try{if(existing){await runTransaction(db,async t=>{const r=doc(db,"inventario",existing.id),s=await t.get(r),cur=s.exists()?Number(s.data().quantity)||0:0;t.update(r,{quantity:cur+q,updatedAt:serverTimestamp()})})}else await addDoc(inventoryRef,{name,normalizedName:n,quantity:q,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});$("#inventoryProductName").value="";$("#inventoryProductQuantity").value="";msg(out,"Inventario actualizado.")}catch(e){console.error(e);msg(out,"No se pudo guardar el producto.",true)}}
 async function changeStock(id,delta){try{await runTransaction(db,async t=>{const r=doc(db,"inventario",id),s=await t.get(r);if(!s.exists())return;const cur=Number(s.data().quantity)||0;t.update(r,{quantity:Math.max(0,cur+delta),updatedAt:serverTimestamp()})})}catch(e){console.error(e)}}
 
@@ -46,7 +120,7 @@ async function saveEditedPayment(){const p=payments.find(x=>x.id===editPaymentId
 
 function renderHistory(){const c=$("#historyList");const items=allMovements();if(!items.length){c.innerHTML='<p class="empty">Todavía no hay movimientos.</p>';return}const months=[...new Set(items.map(x=>x.date?.slice(0,7)).filter(Boolean))].sort().reverse();c.innerHTML=months.map(m=>{const mi=items.filter(x=>x.date?.startsWith(m)),sv=mi.filter(x=>x.kind==="sale"),pv=mi.filter(x=>x.kind==="payment");const salesHTML=sv.length?sv.map(x=>`<article class="movement"><div><strong>${esc(x.clientName)}</strong><small>${esc(x.article)}${x.quantity?` · ${x.quantity} ${Number(x.quantity)===1?"unidad":"unidades"}`:""} · ${x.status==="paid"?"Pagado":"A crédito"} · ${dateFmt(x.date)}</small></div><div><div class="moneyval sale">${money(x.amount)}</div><button class="textbtn delete-record" data-col="ventas" data-id="${esc(x.id)}">Eliminar</button></div></article>`).join(""):'<p class="empty">Sin ventas.</p>';const payHTML=pv.length?pv.map(x=>`<article class="movement"><div><strong>${esc(x.clientName)}</strong><small>Pago recibido · ${dateFmt(x.date)}</small></div><div><div class="moneyval payment">+${money(x.amount)}</div><button class="textbtn delete-record" data-col="pagos" data-id="${esc(x.id)}">Eliminar</button></div></article>`).join(""):'<p class="empty">Sin pagos.</p>';return`<section class="month-block"><div class="month-heading"><h2>${monthLabel(m)}</h2><span>${mi.length} movimientos</span></div><div class="history-section"><h3>Ventas</h3>${salesHTML}</div><div class="history-section"><h3>Pagos recibidos</h3>${payHTML}</div></section>`}).join("");$$('.delete-record').forEach(b=>b.onclick=async()=>{if(confirm("¿Eliminar este registro?"))await deleteDoc(doc(db,b.dataset.col,b.dataset.id))})}
 
-function bind(){if(page==="sale"){$("#saleDate").value=todayISO;$("#saveSaleButton").onclick=saveSale;$("#saleAmount").onblur=e=>e.target.value=parseAmount(e.target.value)?new Intl.NumberFormat("es-CR").format(parseAmount(e.target.value)):""}if(page==="inventory"){$("#saveInventoryProductButton").onclick=addProduct;$("#inventoryList").onclick=e=>{const b=e.target.closest('[data-change]');if(b)changeStock(b.dataset.id,Number(b.dataset.change))}}if(page==="client"){$("#paymentDate").value=todayISO;$("#savePaymentButton").onclick=savePayment;$("#showPaymentButton").onclick=()=>$("#paymentPanel").classList.toggle("hidden");$("#saveEditSaleButton").onclick=saveEditedSale;$("#saveEditPaymentButton").onclick=saveEditedPayment;$("#cancelEditSaleButton").onclick=()=>$("#editSaleDialog").close();$("#cancelEditPaymentButton").onclick=()=>$("#editPaymentDialog").close()}}
+function bind(){if(page==="sale"){$("#saleDate").value=todayISO;$("#saveSaleButton").onclick=saveSale;$("#saleAmount").onblur=e=>e.target.value=parseAmount(e.target.value)?new Intl.NumberFormat("es-CR").format(parseAmount(e.target.value)):""}if(page==="inventory"){$("#saveInventoryProductButton").onclick=addProduct;bindStockEditor()}if(page==="client"){$("#paymentDate").value=todayISO;$("#savePaymentButton").onclick=savePayment;$("#showPaymentButton").onclick=()=>$("#paymentPanel").classList.toggle("hidden");$("#saveEditSaleButton").onclick=saveEditedSale;$("#saveEditPaymentButton").onclick=saveEditedPayment;$("#cancelEditSaleButton").onclick=()=>$("#editSaleDialog").close();$("#cancelEditPaymentButton").onclick=()=>$("#editPaymentDialog").close()}}
 bind();
 onSnapshot(salesRef,s=>{sales=s.docs.map(d=>({id:d.id,...d.data()}));ready.sales=true;setStatus();render()},e=>console.error(e));
 onSnapshot(paymentsRef,s=>{payments=s.docs.map(d=>({id:d.id,...d.data()}));ready.payments=true;setStatus();render()},e=>console.error(e));

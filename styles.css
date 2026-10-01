@@ -12,3 +12,21 @@ a{text-decoration:none;color:inherit} button,input,select{font:inherit}.shell{ma
 .month-block{margin-bottom:22px}.month-heading{display:flex;align-items:end;justify-content:space-between;margin:0 0 10px;padding:0 4px}.month-heading h2{font-family:Georgia,serif;margin:0;font-size:25px}.month-heading span{color:var(--muted);font-size:13px}.history-section{background:rgba(255,250,247,.94);border:1px solid var(--line);border-radius:22px;padding:16px;margin-bottom:10px;box-shadow:0 8px 22px rgba(92,63,76,.07)}.history-section h3{margin:0 0 10px;color:#6f5364}.movement{display:grid;grid-template-columns:1fr auto;gap:8px}.movement+.movement{margin-top:8px}.movement .moneyval{font-weight:900}.moneyval.sale{color:#7a586b}.moneyval.payment{color:var(--ok)}.empty{text-align:center;color:var(--muted);padding:24px}
 dialog{border:0;background:transparent;padding:0}dialog::backdrop{background:rgba(50,35,43,.42)}.dialog{width:min(92vw,500px);background:#fffaf7;border-radius:24px;padding:20px;box-shadow:0 24px 60px rgba(0,0,0,.18)}.dialog-actions{display:flex;gap:10px;margin-top:15px}.dialog-actions>*{flex:1}
 @media(max-width:620px){.shell{padding:16px 13px 30px}.hero img{max-height:205px}.hero h1{font-size:37px}.metrics,.menu-grid,.summary-two{grid-template-columns:1fr}.metric{min-height:118px}.detail-stats{grid-template-columns:1fr}.topbar{align-items:flex-start}.status{font-size:11px}.debtor{grid-template-columns:1fr}.debtor .amount{justify-self:start}.menu-card{min-height:120px}}
+
+.inventory-item{flex-wrap:wrap}
+.inventory-item>div:first-child{flex:1 1 115px;min-width:0;overflow-wrap:anywhere}
+.stock{flex-shrink:0;gap:6px;margin-left:auto}
+.stock button{cursor:pointer;min-height:44px}
+.stock .stock-edit{width:auto;min-width:54px;height:auto;min-height:48px;padding:5px 8px;background:#fdf3f6;display:grid;gap:1px}
+.stock-edit strong{font-size:16px;color:var(--ink)}
+.stock-edit span{font-size:11px;font-weight:700}
+.stock button:focus-visible{outline:3px solid var(--mauve);outline-offset:3px}
+.stock-hint{color:var(--muted);font-size:14px;line-height:1.5}
+.stock-message:empty{display:none}
+.stock-dialog{max-height:85dvh;overflow-y:auto;color:var(--ink)}
+.stock-dialog h2{margin:0 0 12px;font-size:22px}
+.stock-product-name{font-weight:800;margin-bottom:4px;overflow-wrap:anywhere}
+.stock-dialog .dialog-actions{flex-wrap:wrap}
+.stock-dialog .dialog-actions>*{flex:1 1 120px;cursor:pointer}
+.stock-dialog button:disabled{opacity:.6;cursor:wait}
+#editStockQuantity{font-size:24px;font-weight:800}
