@@ -21,12 +21,118 @@ function monthLabel(k){const[y,m]=k.split("-").map(Number);const t=new Intl.Date
 function allMovements(){return[...sales.map(x=>({...x,kind:"sale",sortTime:stamp(x)})),...payments.map(x=>({...x,kind:"payment",sortTime:stamp(x)}))].sort((a,b)=>b.sortTime-a.sortTime)}
 function activeInventory(){return [...inventory].filter(x=>Number(x.quantity)>0).sort((a,b)=>a.name.localeCompare(b.name,"es"))}
 function setStatus(){const el=$("#connectionStatus");if(el&&ready.sales&&ready.payments&&ready.inventory)el.textContent="● Sincronizado"}
-function render(){if(page==="home")renderHome();if(page==="sale")renderSaleProducts();if(page==="inventory")renderInventory();if(page==="debts")renderDebts();if(page==="client")renderClient();if(page==="history")renderHistory()}
+function render(){if(page==="home")renderHome();if(page==="sale")renderSaleProducts();if(page==="inventory")renderInventory();if(page==="debts")renderDebts();if(page==="client"){renderClient();if($("#editSaleDialog")?.open)refreshSaleItems("#editSaleItems")}if(page==="history")renderHistory()}
 
 function renderHome(){const sm=sales.filter(x=>x.date?.startsWith(currentMonth));const total=sm.reduce((a,b)=>a+Number(b.amount||0),0);const ds=debtors(),debt=ds.reduce((a,b)=>a+b.debt,0);$("#monthSales").textContent=money(total);$("#monthSalesCount").textContent=`${sm.length} ${sm.length===1?"venta":"ventas"}`;$("#currentDebt").textContent=money(debt);$("#debtClientCount").textContent=`${ds.length} ${ds.length===1?"cliente":"clientes"}`}
 
-function renderSaleProducts(){const sel=$("#article");if(!sel)return;const old=sel.value,items=activeInventory();sel.innerHTML='<option value="">Seleccionar artículo…</option>'+items.map(x=>`<option value="${esc(x.id)}">${esc(x.name)} — ${x.quantity} disp.</option>`).join("");if(items.some(x=>x.id===old))sel.value=old;const h=$("#articleStockHint");if(h)h.textContent=items.length?"Selecciona un producto del inventario.":"Agrega productos desde Inventario."}
-async function saveSale(){const client=normName($("#clientName").value),pid=$("#article").value,prod=inventory.find(x=>x.id===pid),qty=Number.parseInt($("#saleQuantity").value,10),amount=parseAmount($("#saleAmount").value),date=$("#saleDate").value,status=$("input[name='saleStatus']:checked")?.value,out=$("#saleMessage");if(!client||!prod||!Number.isInteger(qty)||qty<=0||!amount||!date||!status){msg(out,"Completa cliente, artículo, cantidad, monto y fecha.",true);return}if(qty>Number(prod.quantity)){msg(out,`Solo hay ${prod.quantity} unidades disponibles.`,true);return}const btn=$("#saveSaleButton");btn.disabled=true;try{const saleDoc=doc(salesRef),productDoc=doc(db,"inventario",pid);await runTransaction(db,async t=>{const ps=await t.get(productDoc);if(!ps.exists())throw new Error("PRODUCT_NOT_FOUND");const stock=Number(ps.data().quantity)||0;if(qty>stock)throw new Error("INSUFFICIENT_STOCK");t.set(saleDoc,{clientName:client,clientKey:keyName(client),productId:pid,article:ps.data().name,quantity:qty,amount,status,date,createdAt:serverTimestamp()});t.update(productDoc,{quantity:stock-qty,updatedAt:serverTimestamp()})});$("#clientName").value="";$("#article").value="";$("#saleQuantity").value="";$("#saleAmount").value="";$("#saleDate").value=todayISO;$("input[name='saleStatus'][value='paid']").checked=true;msg(out,"Venta guardada e inventario actualizado.")}catch(e){console.error(e);msg(out,e.message==="INSUFFICIENT_STOCK"?"No hay suficientes unidades disponibles.":"No se pudo guardar la venta.",true)}finally{btn.disabled=false}}
+// Older sales keep their original fields; new sales also store each product separately.
+function saleItems(sale){
+  if(Array.isArray(sale.items)&&sale.items.length)return sale.items;
+  return sale.productId&&sale.quantity?[{productId:sale.productId,article:sale.article,quantity:Number(sale.quantity)}]:[];
+}
+function saleProductsHTML(sale){
+  const items=saleItems(sale);
+  return items.length?`<ul class="purchase-products">${items.map(item=>`<li><span>${esc(item.article)}</span><span class="product-units">× ${esc(item.quantity)}</span></li>`).join("")}</ul>`:`<strong>${esc(sale.article)}</strong>`;
+}
+function itemTotals(items){const totals=new Map();for(const item of items)totals.set(item.productId,(totals.get(item.productId)||0)+Number(item.quantity));return totals}
+function saleItemFields(items){
+  return {items,productId:items.length===1?items[0].productId:"",article:items.length===1?items[0].article:items.map(x=>`${x.article} × ${x.quantity}`).join("; "),quantity:items.reduce((total,x)=>total+x.quantity,0)};
+}
+let itemRowNumber=0,saleSaving=false;
+function addSaleItem(containerId,item={}){
+  const container=$(containerId),row=document.createElement("div"),id=`sale-item-${++itemRowNumber}`;
+  row.className="sale-item";
+  row.innerHTML=`<div class="sale-item-heading"><strong class="item-number"></strong><button type="button" class="textbtn remove-sale-item">Quitar</button></div><div class="field item-product"><label for="${id}-product">Producto</label><select id="${id}-product" class="item-select" aria-describedby="${id}-stock"><option value="${esc(item.productId||"")}">${esc(item.article||"Seleccionar producto…")}</option></select><small id="${id}-stock" class="item-stock stock-hint"></small></div><div class="field item-quantity"><label for="${id}-quantity">Cantidad</label><input id="${id}-quantity" class="item-qty" type="number" inputmode="numeric" min="1" step="1" value="${esc(item.quantity??1)}"></div>`;
+  container.append(row);
+  refreshSaleItems(containerId);
+  return row;
+}
+function refreshSaleItems(containerId){
+  const container=$(containerId);if(!container)return;
+  const rows=[...container.querySelectorAll('.sale-item')],editing=containerId==="#editSaleItems";
+  const original=editing&&editSaleSnapshot?saleItems(editSaleSnapshot):[],returned=itemTotals(original);
+  const selected=rows.map(row=>row.querySelector('.item-select').value);
+  rows.forEach((row,index)=>{
+    row.querySelector('.item-number').textContent=`Producto ${index+1}`;
+    const remove=row.querySelector('.remove-sale-item');remove.hidden=rows.length===1;remove.setAttribute('aria-label',`Quitar producto ${index+1}`);
+    const select=row.querySelector('.item-select'),old=select.value,oldName=select.selectedOptions[0]?.textContent||"Producto no disponible";
+    const options=[...inventory].filter(x=>Number(x.quantity)+(returned.get(x.id)||0)>0||x.id===old).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+    select.innerHTML='<option value="">Seleccionar producto…</option>'+options.map(x=>`<option value="${esc(x.id)}" ${selected.some((id,i)=>i!==index&&id===x.id)?"disabled":""}>${esc(x.name)}</option>`).join('');
+    if(old&&!options.some(x=>x.id===old))select.add(new Option(oldName,old));
+    select.value=old;
+    const product=inventory.find(x=>x.id===old),available=product?Number(product.quantity)+(returned.get(old)||0):0;
+    const hint=row.querySelector('.item-stock'),quantity=Number(row.querySelector('.item-qty').value);
+    hint.textContent=old?(product?`${available} ${available===1?"unidad disponible":"unidades disponibles"}`:"Este producto ya no está disponible."):(ready.inventory?(options.length?"":"Agregá productos desde Inventario."):"Cargando inventario…");
+    hint.classList.toggle('error',Boolean(old)&&(!product||quantity>available));
+  });
+  const chosen=rows.filter(row=>row.querySelector('.item-select').value),units=chosen.reduce((sum,row)=>sum+(Number(row.querySelector('.item-qty').value)||0),0);
+  const summary=$(editing?'#editSaleItemsSummary':'#saleItemsSummary');
+  summary.textContent=chosen.length?`${chosen.length} ${chosen.length===1?"producto":"productos"} · ${units} ${units===1?"unidad":"unidades"}`:"";
+}
+function readSaleItems(containerId){
+  const rows=[...$(containerId).querySelectorAll('.sale-item')],ids=new Set();
+  if(!rows.length)throw new Error("Agregá al menos un producto.");
+  return rows.map((row,index)=>{
+    const productId=row.querySelector('.item-select').value,raw=row.querySelector('.item-qty').value.trim(),quantity=Number(raw);
+    if(!productId)throw new Error(`Seleccioná el producto ${index+1}.`);
+    if(!/^\d+$/.test(raw)||!Number.isSafeInteger(quantity)||quantity<=0)throw new Error(`Ingresá una cantidad entera mayor que cero para el producto ${index+1}.`);
+    if(ids.has(productId))throw new Error("Este producto está repetido. Usá una sola fila y ajustá su cantidad.");
+    ids.add(productId);return{productId,quantity};
+  });
+}
+function bindSaleItems(containerId,buttonId){
+  $(buttonId).onclick=()=>addSaleItem(containerId).querySelector('.item-select').focus();
+  $(containerId).addEventListener('click',event=>{
+    const remove=event.target.closest('.remove-sale-item');
+    if(remove&&$(containerId).children.length>1){remove.closest('.sale-item').remove();refreshSaleItems(containerId)}
+  });
+  $(containerId).addEventListener('change',()=>refreshSaleItems(containerId));
+  $(containerId).addEventListener('input',event=>{
+    if(event.target.matches('.item-qty'))refreshSaleItems(containerId);
+  });
+}
+function renderSaleProducts(){refreshSaleItems('#saleItems')}
+function saleError(error){
+  if(error.code==='permission-denied')return "No se pudo guardar: faltan permisos de la base de datos. Tus datos del formulario se conservaron.";
+  if(error.code==='unavailable')return "No se pudo conectar. Revisá tu conexión e intentá de nuevo.";
+  return error.saleMessage||"No se pudo guardar la venta. Revisá tu conexión e intentá de nuevo.";
+}
+function productError(message){const error=new Error(message);error.saleMessage=message;return error}
+// Read every product before writing so a sale is saved completely or not at all.
+async function prepareSaleStock(transaction,requested,previous=[]){
+  const returned=itemTotals(previous),ids=[...new Set([...returned.keys(),...requested.map(x=>x.productId)])],products=new Map();
+  for(const id of ids){
+    const ref=doc(db,"inventario",id),snapshot=await transaction.get(ref);
+    if(!snapshot.exists())throw productError("Un producto ya no existe. Revisá los productos de la venta.");
+    products.set(id,{ref,...snapshot.data()});
+  }
+  const wanted=itemTotals(requested),updates=[];
+  for(const [id,product] of products){
+    const available=(Number(product.quantity)||0)+(returned.get(id)||0),needed=wanted.get(id)||0;
+    if(needed>available)throw productError(`Solo hay ${available} unidades disponibles de ${product.name}.`);
+    updates.push({ref:product.ref,quantity:available-needed});
+  }
+  const items=requested.map(x=>({...x,article:products.get(x.productId).name}));
+  return{items,updates};
+}
+async function saveSale(event){
+  event?.preventDefault();if(saleSaving)return;
+  const client=normName($('#clientName').value),amount=parseAmount($('#saleAmount').value),date=$('#saleDate').value,status=$("input[name='saleStatus']:checked")?.value,out=$('#saleMessage');
+  if(!client||!Number.isSafeInteger(amount)||amount<=0||!date||!['paid','credit'].includes(status)){msg(out,"Completá cliente, monto total, fecha y estado.",true);return}
+  let requested;try{requested=readSaleItems('#saleItems')}catch(error){msg(out,error.message,true);return}
+  saleSaving=true;$('#saleFields').disabled=true;$('#saveSaleButton').textContent='Guardando…';msg(out,"");
+  try{
+    const saleDoc=doc(salesRef);
+    await runTransaction(db,async transaction=>{
+      const {items,updates}=await prepareSaleStock(transaction,requested);
+      transaction.set(saleDoc,{clientName:client,clientKey:keyName(client),...saleItemFields(items),amount,status,date,createdAt:serverTimestamp()});
+      for(const update of updates)transaction.update(update.ref,{quantity:update.quantity,updatedAt:serverTimestamp()});
+    });
+    $('#saleForm').reset();$('#saleItems').replaceChildren();addSaleItem('#saleItems');$('#saleDate').value=todayISO;
+    msg(out,"Venta guardada con todos sus productos. Inventario actualizado.");
+  }catch(error){console.error(error);msg(out,saleError(error),true)}
+  finally{saleSaving=false;$('#saleFields').disabled=false;$('#saveSaleButton').textContent='Guardar venta'}
+}
 
 function renderInventory(){const items=activeInventory();$("#inventoryProductCount").textContent=String(items.length);$("#inventoryUnitCount").textContent=String(items.reduce((s,x)=>s+Number(x.quantity||0),0));const c=$("#inventoryList");c.innerHTML=items.length?items.map(x=>`<article class="inventory-item"><div><strong>${esc(x.name)}</strong><small>${x.quantity} ${Number(x.quantity)===1?"unidad disponible":"unidades disponibles"}</small></div><div class="stock"><button type="button" data-change="-1" data-id="${esc(x.id)}" aria-label="Restar una unidad de ${esc(x.name)}">−</button><button type="button" class="stock-edit" data-edit-stock="${esc(x.id)}" aria-label="Editar cantidad de ${esc(x.name)}: ${x.quantity} unidades"><strong>${x.quantity}</strong><span>Editar</span></button><button type="button" data-change="1" data-id="${esc(x.id)}" aria-label="Sumar una unidad de ${esc(x.name)}">+</button></div></article>`).join(""):'<p class="empty">Todavía no hay productos disponibles.</p>'}
 
@@ -110,17 +216,54 @@ function renderDebts(){const ds=debtors(),total=ds.reduce((s,x)=>s+x.debt,0);$("
 
 let clientKeyParam=new URLSearchParams(location.search).get("client")||"";
 function clientData(){const creditSales=sales.filter(x=>x.status==="credit"&&(x.clientKey||keyName(x.clientName))===clientKeyParam).sort((a,b)=>stamp(b)-stamp(a)),pays=payments.filter(x=>(x.clientKey||keyName(x.clientName))===clientKeyParam).sort((a,b)=>stamp(b)-stamp(a));const credit=creditSales.reduce((s,x)=>s+Number(x.amount||0),0),paid=pays.reduce((s,x)=>s+Number(x.amount||0),0);return{creditSales,pays,credit,paid,pending:Math.max(0,credit-paid),name:creditSales[0]?.clientName||pays[0]?.clientName||"Cliente"}}
-function renderClient(){if(!clientKeyParam)return;const d=clientData();$("#clientNameTitle").textContent=d.name;$("#clientCreditTotal").textContent=money(d.credit);$("#clientPaidTotal").textContent=money(d.paid);$("#clientPendingTotal").textContent=money(d.pending);$("#clientSalesHistory").innerHTML=d.creditSales.length?d.creditSales.map(x=>`<article class="detail-row"><div><strong>${esc(x.article)}</strong><small>${x.quantity?`${x.quantity} ${Number(x.quantity)===1?"unidad":"unidades"} · `:""}${dateFmt(x.date)}</small></div><div><strong>${money(x.amount)}</strong><div class="detail-actions"><button class="textbtn edit-sale" data-id="${esc(x.id)}">Editar</button></div></div></article>`).join(""):'<p class="empty">No hay compras a crédito.</p>';$("#clientPaymentsHistory").innerHTML=d.pays.length?d.pays.map(x=>`<article class="detail-row"><div><strong>Pago recibido</strong><small>${dateFmt(x.date)}</small></div><div><strong style="color:var(--ok)">+${money(x.amount)}</strong><div class="detail-actions"><button class="textbtn edit-payment" data-id="${esc(x.id)}">Editar</button></div></div></article>`).join(""):'<p class="empty">Todavía no ha realizado pagos.</p>';$("#paymentClientLabel").textContent=`Saldo pendiente: ${money(d.pending)}`;$$('.edit-sale').forEach(b=>b.onclick=()=>openEditSale(b.dataset.id));$$('.edit-payment').forEach(b=>b.onclick=()=>openEditPayment(b.dataset.id));if(new URLSearchParams(location.search).get("pay")==="1"&&!window._autoPay){window._autoPay=true;$("#paymentPanel").classList.remove("hidden")}}
+function renderClient(){if(!clientKeyParam)return;const d=clientData();$("#clientNameTitle").textContent=d.name;$("#clientCreditTotal").textContent=money(d.credit);$("#clientPaidTotal").textContent=money(d.paid);$("#clientPendingTotal").textContent=money(d.pending);$("#clientSalesHistory").innerHTML=d.creditSales.length?d.creditSales.map(x=>`<article class="detail-row"><div>${saleProductsHTML(x)}<small>${dateFmt(x.date)}</small></div><div><strong>${money(x.amount)}</strong><div class="detail-actions"><button class="textbtn edit-sale" data-id="${esc(x.id)}">Editar</button></div></div></article>`).join(""):'<p class="empty">No hay compras a crédito.</p>';$("#clientPaymentsHistory").innerHTML=d.pays.length?d.pays.map(x=>`<article class="detail-row"><div><strong>Pago recibido</strong><small>${dateFmt(x.date)}</small></div><div><strong style="color:var(--ok)">+${money(x.amount)}</strong><div class="detail-actions"><button class="textbtn edit-payment" data-id="${esc(x.id)}">Editar</button></div></div></article>`).join(""):'<p class="empty">Todavía no ha realizado pagos.</p>';$("#paymentClientLabel").textContent=`Saldo pendiente: ${money(d.pending)}`;$$('.edit-sale').forEach(b=>b.onclick=()=>openEditSale(b.dataset.id));$$('.edit-payment').forEach(b=>b.onclick=()=>openEditPayment(b.dataset.id));if(new URLSearchParams(location.search).get("pay")==="1"&&!window._autoPay){window._autoPay=true;$("#paymentPanel").classList.remove("hidden")}}
 async function savePayment(){const d=clientData(),amount=parseAmount($("#paymentAmount").value),date=$("#paymentDate").value,out=$("#paymentMessage");if(!amount||!date){msg(out,"Completa monto y fecha.",true);return}if(amount>d.pending){msg(out,"El pago supera la deuda.",true);return}try{await addDoc(paymentsRef,{clientName:d.name,clientKey:clientKeyParam,amount,date,createdAt:serverTimestamp()});$("#paymentAmount").value="";msg(out,"Pago guardado.")}catch(e){console.error(e);msg(out,"No se pudo guardar el pago.",true)}}
-let editSaleId=null,editPaymentId=null;
-function openEditSale(id){const s=sales.find(x=>x.id===id);if(!s)return;editSaleId=id;$("#editSaleClientName").value=s.clientName||"";$("#editSaleAmount").value=new Intl.NumberFormat("es-CR").format(Number(s.amount)||0);$("#editSaleDate").value=s.date||todayISO;const sel=$("#editSaleProduct");sel.innerHTML=inventory.map(x=>`<option value="${esc(x.id)}">${esc(x.name)} — ${x.quantity} disp.</option>`).join("");if(s.productId)sel.value=s.productId;$("#editSaleQuantity").value=s.quantity||1;$("#editSaleProduct").disabled=!s.productId;$("#editSaleQuantity").disabled=!s.productId;$("#editSaleDialog").showModal()}
-async function saveEditedSale(){const s=sales.find(x=>x.id===editSaleId);if(!s)return;const client=normName($("#editSaleClientName").value),amount=parseAmount($("#editSaleAmount").value),date=$("#editSaleDate").value;if(!client||!amount||!date)return msg($("#editSaleMessage"),"Completa cliente, monto y fecha.",true);try{const sr=doc(db,"ventas",s.id);if(!s.productId||!s.quantity){await runTransaction(db,async t=>t.update(sr,{clientName:client,clientKey:keyName(client),amount,date}))}else{const npid=$("#editSaleProduct").value,nq=Number.parseInt($("#editSaleQuantity").value,10),or=doc(db,"inventario",s.productId),nr=doc(db,"inventario",npid);await runTransaction(db,async t=>{const ss=await t.get(sr),os=await t.get(or),ns=npid===s.productId?os:await t.get(nr);if(!ss.exists()||!os.exists()||!ns.exists())throw new Error("NOT_FOUND");const oq=Number(ss.data().quantity)||Number(s.quantity)||0,ost=Number(os.data().quantity)||0,nst=Number(ns.data().quantity)||0;if(npid===s.productId){const avail=ost+oq;if(nq>avail)throw new Error("STOCK");t.update(or,{quantity:avail-nq,updatedAt:serverTimestamp()})}else{if(nq>nst)throw new Error("STOCK");t.update(or,{quantity:ost+oq,updatedAt:serverTimestamp()});t.update(nr,{quantity:nst-nq,updatedAt:serverTimestamp()})}t.update(sr,{clientName:client,clientKey:keyName(client),productId:npid,article:ns.data().name,quantity:nq,amount,date})})}$("#editSaleDialog").close()}catch(e){console.error(e);msg($("#editSaleMessage"),e.message==="STOCK"?"No hay suficientes unidades disponibles.":"No se pudo actualizar.",true)}}
+let editSaleId=null,editPaymentId=null,editSaleSnapshot=null,editSaleSaving=false;
+function saleSignature(sale){return JSON.stringify({clientName:sale.clientName,clientKey:sale.clientKey,amount:sale.amount,date:sale.date,status:sale.status,article:sale.article,items:saleItems(sale)})}
+function openEditSale(id){
+  const sale=sales.find(x=>x.id===id);if(!sale)return;
+  editSaleId=id;editSaleSnapshot={...sale};
+  $('#editSaleClientName').value=sale.clientName||'';
+  $('#editSaleAmount').value=new Intl.NumberFormat('es-CR').format(Number(sale.amount)||0);
+  $('#editSaleDate').value=sale.date||todayISO;
+  const items=saleItems(sale);$('#editSaleItems').replaceChildren();
+  $('#editSaleProducts').classList.toggle('hidden',!items.length);
+  $('#editSaleLegacy').classList.toggle('hidden',Boolean(items.length));
+  $('#editSaleLegacy').textContent=`Producto: ${sale.article||'Compra anterior'}. Esta compra no tiene productos vinculados al inventario.`;
+  for(const item of items)addSaleItem('#editSaleItems',item);
+  msg($('#editSaleMessage'),'');$('#editSaleDialog').showModal();
+}
+async function saveEditedSale(event){
+  event?.preventDefault();if(!editSaleSnapshot||editSaleSaving)return;
+  const original=editSaleSnapshot,client=normName($('#editSaleClientName').value),amount=parseAmount($('#editSaleAmount').value),date=$('#editSaleDate').value,out=$('#editSaleMessage');
+  if(!client||!Number.isSafeInteger(amount)||amount<=0||!date){msg(out,'Completá cliente, monto total y fecha.',true);return}
+  let requested=null;
+  if(saleItems(original).length){try{requested=readSaleItems('#editSaleItems')}catch(error){msg(out,error.message,true);return}}
+  editSaleSaving=true;$('#editSaleFields').disabled=true;$('#saveEditSaleButton').textContent='Guardando…';msg(out,'');
+  try{
+    await runTransaction(db,async transaction=>{
+      const ref=doc(db,'ventas',editSaleId),snapshot=await transaction.get(ref);
+      if(!snapshot.exists())throw productError('Esta venta ya no existe. Cerrá y revisá el historial.');
+      const current=snapshot.data();
+      if(saleSignature(current)!==saleSignature(original))throw productError('Esta venta cambió mientras la editabas. Cerrá esta ventana y volvé a abrirla para revisar los datos actuales.');
+      const changes={clientName:client,clientKey:keyName(client),amount,date};
+      if(requested){
+        const {items,updates}=await prepareSaleStock(transaction,requested,saleItems(current));
+        Object.assign(changes,saleItemFields(items));
+        for(const update of updates)transaction.update(update.ref,{quantity:update.quantity,updatedAt:serverTimestamp()});
+      }
+      transaction.update(ref,changes);
+    });
+    $('#editSaleDialog').close();
+  }catch(error){console.error(error);msg(out,saleError(error),true)}
+  finally{editSaleSaving=false;$('#editSaleFields').disabled=false;$('#saveEditSaleButton').textContent='Guardar'}
+}
 function openEditPayment(id){const p=payments.find(x=>x.id===id);if(!p)return;editPaymentId=id;$("#editPaymentAmount").value=new Intl.NumberFormat("es-CR").format(Number(p.amount)||0);$("#editPaymentDate").value=p.date||todayISO;$("#editPaymentDialog").showModal()}
 async function saveEditedPayment(){const p=payments.find(x=>x.id===editPaymentId);if(!p)return;const amount=parseAmount($("#editPaymentAmount").value),date=$("#editPaymentDate").value;if(!amount||!date)return msg($("#editPaymentMessage"),"Completa monto y fecha.",true);const credit=sales.filter(x=>x.status==="credit"&&(x.clientKey||keyName(x.clientName))===clientKeyParam).reduce((s,x)=>s+Number(x.amount),0),others=payments.filter(x=>x.id!==p.id&&(x.clientKey||keyName(x.clientName))===clientKeyParam).reduce((s,x)=>s+Number(x.amount),0);if(amount>Math.max(0,credit-others))return msg($("#editPaymentMessage"),"El pago supera la deuda pendiente.",true);try{await runTransaction(db,async t=>t.update(doc(db,"pagos",p.id),{amount,date}));$("#editPaymentDialog").close()}catch(e){console.error(e);msg($("#editPaymentMessage"),"No se pudo actualizar.",true)}}
 
-function renderHistory(){const c=$("#historyList");const items=allMovements();if(!items.length){c.innerHTML='<p class="empty">Todavía no hay movimientos.</p>';return}const months=[...new Set(items.map(x=>x.date?.slice(0,7)).filter(Boolean))].sort().reverse();c.innerHTML=months.map(m=>{const mi=items.filter(x=>x.date?.startsWith(m)),sv=mi.filter(x=>x.kind==="sale"),pv=mi.filter(x=>x.kind==="payment");const salesHTML=sv.length?sv.map(x=>`<article class="movement"><div><strong>${esc(x.clientName)}</strong><small>${esc(x.article)}${x.quantity?` · ${x.quantity} ${Number(x.quantity)===1?"unidad":"unidades"}`:""} · ${x.status==="paid"?"Pagado":"A crédito"} · ${dateFmt(x.date)}</small></div><div><div class="moneyval sale">${money(x.amount)}</div><button class="textbtn delete-record" data-col="ventas" data-id="${esc(x.id)}">Eliminar</button></div></article>`).join(""):'<p class="empty">Sin ventas.</p>';const payHTML=pv.length?pv.map(x=>`<article class="movement"><div><strong>${esc(x.clientName)}</strong><small>Pago recibido · ${dateFmt(x.date)}</small></div><div><div class="moneyval payment">+${money(x.amount)}</div><button class="textbtn delete-record" data-col="pagos" data-id="${esc(x.id)}">Eliminar</button></div></article>`).join(""):'<p class="empty">Sin pagos.</p>';return`<section class="month-block"><div class="month-heading"><h2>${monthLabel(m)}</h2><span>${mi.length} movimientos</span></div><div class="history-section"><h3>Ventas</h3>${salesHTML}</div><div class="history-section"><h3>Pagos recibidos</h3>${payHTML}</div></section>`}).join("");$$('.delete-record').forEach(b=>b.onclick=async()=>{if(confirm("¿Eliminar este registro?"))await deleteDoc(doc(db,b.dataset.col,b.dataset.id))})}
+function renderHistory(){const c=$("#historyList");const items=allMovements();if(!items.length){c.innerHTML='<p class="empty">Todavía no hay movimientos.</p>';return}const months=[...new Set(items.map(x=>x.date?.slice(0,7)).filter(Boolean))].sort().reverse();c.innerHTML=months.map(m=>{const mi=items.filter(x=>x.date?.startsWith(m)),sv=mi.filter(x=>x.kind==="sale"),pv=mi.filter(x=>x.kind==="payment");const salesHTML=sv.length?sv.map(x=>`<article class="movement"><div><strong>${esc(x.clientName)}</strong>${saleProductsHTML(x)}<small>${x.status==="paid"?"Pagado":"A crédito"} · ${dateFmt(x.date)}</small></div><div><div class="moneyval sale">${money(x.amount)}</div><button class="textbtn delete-record" data-col="ventas" data-id="${esc(x.id)}">Eliminar</button></div></article>`).join(""):'<p class="empty">Sin ventas.</p>';const payHTML=pv.length?pv.map(x=>`<article class="movement"><div><strong>${esc(x.clientName)}</strong><small>Pago recibido · ${dateFmt(x.date)}</small></div><div><div class="moneyval payment">+${money(x.amount)}</div><button class="textbtn delete-record" data-col="pagos" data-id="${esc(x.id)}">Eliminar</button></div></article>`).join(""):'<p class="empty">Sin pagos.</p>';return`<section class="month-block"><div class="month-heading"><h2>${monthLabel(m)}</h2><span>${mi.length} movimientos</span></div><div class="history-section"><h3>Ventas</h3>${salesHTML}</div><div class="history-section"><h3>Pagos recibidos</h3>${payHTML}</div></section>`}).join("");$$('.delete-record').forEach(b=>b.onclick=async()=>{if(confirm("¿Eliminar este registro?"))await deleteDoc(doc(db,b.dataset.col,b.dataset.id))})}
 
-function bind(){if(page==="sale"){$("#saleDate").value=todayISO;$("#saveSaleButton").onclick=saveSale;$("#saleAmount").onblur=e=>e.target.value=parseAmount(e.target.value)?new Intl.NumberFormat("es-CR").format(parseAmount(e.target.value)):""}if(page==="inventory"){$("#saveInventoryProductButton").onclick=addProduct;bindStockEditor()}if(page==="client"){$("#paymentDate").value=todayISO;$("#savePaymentButton").onclick=savePayment;$("#showPaymentButton").onclick=()=>$("#paymentPanel").classList.toggle("hidden");$("#saveEditSaleButton").onclick=saveEditedSale;$("#saveEditPaymentButton").onclick=saveEditedPayment;$("#cancelEditSaleButton").onclick=()=>$("#editSaleDialog").close();$("#cancelEditPaymentButton").onclick=()=>$("#editPaymentDialog").close()}}
+function bind(){if(page==="sale"){$("#saleDate").value=todayISO;$("#saleForm").onsubmit=saveSale;bindSaleItems("#saleItems","#addSaleItemButton");addSaleItem("#saleItems");$("#saleAmount").onblur=e=>e.target.value=parseAmount(e.target.value)?new Intl.NumberFormat("es-CR").format(parseAmount(e.target.value)):""}if(page==="inventory"){$("#saveInventoryProductButton").onclick=addProduct;bindStockEditor()}if(page==="client"){$("#paymentDate").value=todayISO;$("#savePaymentButton").onclick=savePayment;$("#showPaymentButton").onclick=()=>$("#paymentPanel").classList.toggle("hidden");$("#editSaleForm").onsubmit=saveEditedSale;bindSaleItems("#editSaleItems","#addEditSaleItemButton");$("#editSaleDialog").addEventListener("cancel",event=>{if(editSaleSaving)event.preventDefault()});$("#saveEditPaymentButton").onclick=saveEditedPayment;$("#cancelEditSaleButton").onclick=()=>$("#editSaleDialog").close();$("#cancelEditPaymentButton").onclick=()=>$("#editPaymentDialog").close()}}
 bind();
 onSnapshot(salesRef,s=>{sales=s.docs.map(d=>({id:d.id,...d.data()}));ready.sales=true;setStatus();render()},e=>console.error(e));
 onSnapshot(paymentsRef,s=>{payments=s.docs.map(d=>({id:d.id,...d.data()}));ready.payments=true;setStatus();render()},e=>console.error(e));

@@ -30,3 +30,29 @@ dialog{border:0;background:transparent;padding:0}dialog::backdrop{background:rgb
 .stock-dialog .dialog-actions>*{flex:1 1 120px;cursor:pointer}
 .stock-dialog button:disabled{opacity:.6;cursor:wait}
 #editStockQuantity{font-size:24px;font-weight:800}
+
+/* One sale can contain several independently stocked products. */
+.sale-fields{padding:0;margin:0;min-width:0;border:0}
+.sale-products{min-width:0}
+.sale-products h2{font-size:18px;margin:2px 0 12px}
+.sale-items{display:grid;gap:12px}
+.sale-item{min-width:0;display:grid;grid-template-columns:minmax(0,1fr) 105px;gap:12px;padding:15px;border:1px solid var(--line);border-radius:18px;background:#fff7f6}
+.sale-item-heading{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:10px;min-width:0}
+.sale-item-heading strong{font-size:14px;color:#795167}
+.sale-item-heading button{min-height:36px;padding:4px 6px;font-size:14px;cursor:pointer}
+.sale-item .field{min-width:0}
+.sale-item input,.sale-item select{font-size:16px;max-width:100%;padding:12px 10px}
+.sale-item .item-stock{display:block;line-height:1.4;margin-top:7px;overflow-wrap:anywhere}
+.item-stock.error{color:var(--danger)}
+.add-product{width:100%;margin-top:12px;min-height:48px;border-style:dashed;border-color:var(--rose);color:#795167;cursor:pointer}
+.sale-products .stock-hint{margin-bottom:0}
+.sale-dialog{max-height:88dvh;overflow-y:auto}
+.sale-fields:disabled{opacity:.7}
+.sale-fields button:disabled{cursor:wait}
+.sale-fields button:focus-visible{outline:3px solid var(--mauve);outline-offset:3px}
+.purchase-products{list-style:none;margin:6px 0;padding:0;display:grid;gap:5px;font-size:14px}
+.purchase-products li{display:flex;gap:10px;justify-content:space-between;overflow-wrap:anywhere}
+.product-units{white-space:nowrap;font-weight:800;color:#795167}
+.detail-row>div:first-child,.movement>div:first-child{min-width:0;flex:1;overflow-wrap:anywhere}
+.detail-row>div:last-child{flex-shrink:0}
+@media(max-width:460px){.sale-item{grid-template-columns:minmax(0,1fr)}.sale-item-heading{grid-column:1}.item-quantity{max-width:130px}.panel{padding:16px}.detail-row{flex-wrap:wrap}.purchase-products li{justify-content:flex-start}}
