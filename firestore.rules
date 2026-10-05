@@ -1,0 +1,211 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================
+    // VENTAS
+    // =========================
+    match /ventas/{ventaId} {
+      // Keep the existing audience and limits; validate the new sale detail.
+      function validItem(item) {
+        let id = item.productId;
+        let name = item.article;
+        let quantity = item.quantity;
+        let price = item.get('unitPrice', 0);
+        return item.keys().hasOnly(['productId', 'article', 'quantity', 'unitPrice']) &&
+          id is string && id.size() >= 1 &&
+          name is string && name.size() >= 1 && name.size() <= 120 &&
+          quantity is int && quantity >= 1 && quantity <= 10000 &&
+          (!('unitPrice' in item) || (price is int && price > 0 && price <= 100000000));
+      }
+      function validItems(data) {
+        let items = data.items;
+        let count = items.size();
+        return items is list && count >= 1 && count <= 5 &&
+          (count <= 0 || validItem(items[0])) &&
+          (count <= 1 || validItem(items[1])) &&
+          (count <= 2 || validItem(items[2])) &&
+          (count <= 3 || validItem(items[3])) &&
+          (count <= 4 || validItem(items[4])) &&
+          data.productId is string &&
+          data.productId == (items.size() == 1 ? items[0].productId : '') &&
+          data.quantity is int && data.quantity >= 1 && data.quantity <= 10000;
+      }
+      function validProducts(data, allowLegacy) {
+        return 'items' in data ? validItems(data) :
+          ((!('productId' in data) && allowLegacy) ||
+            (data.productId is string && data.productId.size() >= 1 &&
+             data.quantity is int && data.quantity >= 1 && data.quantity <= 10000));
+      }
+      function validSale(data, allowLegacy) {
+        return data.keys().hasOnly([
+          'clientName', 'clientKey', 'productId', 'article', 'quantity',
+          'items', 'amount', 'status', 'date', 'createdAt'
+        ]) &&
+          data.clientName is string && data.clientName.size() >= 1 && data.clientName.size() <= 100 &&
+          data.clientKey is string && data.clientKey.size() >= 1 && data.clientKey.size() <= 100 &&
+          data.article is string && data.article.size() >= 1 && data.article.size() <= 120 &&
+          data.amount is number && data.amount > 0 && data.amount <= 100000000 &&
+          data.status in ['paid', 'credit'] &&
+          data.date is string && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+          validProducts(data, allowLegacy);
+      }
+      allow read, delete: if true;
+      allow create: if validSale(request.resource.data, false) &&
+        request.resource.data.createdAt == request.time;
+      allow update: if validSale(request.resource.data, true) &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.status == 'credit';
+    }
+
+
+    // =========================
+    // PAGOS / ABONOS
+    // =========================
+    match /pagos/{pagoId} {
+      allow read, delete: if true;
+
+      allow create: if
+        request.resource.data.keys().hasOnly([
+          'clientName',
+          'clientKey',
+          'amount',
+          'date',
+          'createdAt'
+        ]) &&
+        request.resource.data.clientName is string &&
+        request.resource.data.clientName.size() >= 1 &&
+        request.resource.data.clientName.size() <= 100 &&
+        request.resource.data.clientKey is string &&
+        request.resource.data.clientKey.size() >= 1 &&
+        request.resource.data.clientKey.size() <= 100 &&
+        request.resource.data.amount is number &&
+        request.resource.data.amount > 0 &&
+        request.resource.data.amount <= 100000000 &&
+        request.resource.data.date is string &&
+        request.resource.data.date.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        request.resource.data.createdAt == request.time;
+
+      // Permitir corregir monto o fecha del pago
+      allow update: if
+        request.resource.data.keys().hasOnly([
+          'clientName',
+          'clientKey',
+          'amount',
+          'date',
+          'createdAt'
+        ]) &&
+        request.resource.data.clientName == resource.data.clientName &&
+        request.resource.data.clientKey == resource.data.clientKey &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.amount is number &&
+        request.resource.data.amount > 0 &&
+        request.resource.data.amount <= 100000000 &&
+        request.resource.data.date is string &&
+        request.resource.data.date.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+
+    // =========================
+    // COMPRAS DEL NEGOCIO
+    // =========================
+    match /compras_negocio/{compraId} {
+      allow read, delete: if true;
+
+      allow create: if
+        request.resource.data.keys().hasOnly([
+          'description',
+          'amount',
+          'date',
+          'createdAt'
+        ]) &&
+        request.resource.data.description is string &&
+        request.resource.data.description.size() >= 1 &&
+        request.resource.data.description.size() <= 120 &&
+        request.resource.data.amount is number &&
+        request.resource.data.amount > 0 &&
+        request.resource.data.amount <= 100000000 &&
+        request.resource.data.date is string &&
+        request.resource.data.date.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+        request.resource.data.createdAt == request.time;
+
+      allow update: if false;
+    }
+
+
+    // =========================
+    // INVENTARIO
+    // =========================
+    match /inventario/{productoId} {
+      allow read: if true;
+
+      // Crear productos
+      allow create: if
+        request.resource.data.keys().hasOnly([
+          'name',
+          'normalizedName',
+          'quantity',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() >= 1 &&
+        request.resource.data.name.size() <= 120 &&
+        request.resource.data.normalizedName is string &&
+        request.resource.data.normalizedName.size() >= 1 &&
+        request.resource.data.normalizedName.size() <= 120 &&
+        request.resource.data.quantity is int &&
+        request.resource.data.quantity >= 0 &&
+        request.resource.data.quantity <= 100000 &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time;
+
+      // Modificar inventario
+      allow update: if
+        request.resource.data.keys().hasOnly([
+          'name',
+          'normalizedName',
+          'quantity',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        request.resource.data.name == resource.data.name &&
+        request.resource.data.normalizedName == resource.data.normalizedName &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.quantity is int &&
+        request.resource.data.quantity >= 0 &&
+        request.resource.data.quantity <= 100000 &&
+        request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+
+    // =========================
+    // FLUJO DE CAJA MANUAL
+    // =========================
+    match /configuracion/flujo_caja {
+      allow read: if true;
+
+      allow create, update: if
+        request.resource.data.keys().hasOnly([
+          'amount'
+        ]) &&
+        request.resource.data.amount is number &&
+        request.resource.data.amount >= 0 &&
+        request.resource.data.amount <= 1000000000;
+
+      allow delete: if false;
+    }
+
+
+    // =========================
+    // BLOQUEAR TODO LO DEMÁS
+    // =========================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

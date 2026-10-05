@@ -56,3 +56,14 @@ dialog{border:0;background:transparent;padding:0}dialog::backdrop{background:rgb
 .detail-row>div:first-child,.movement>div:first-child{min-width:0;flex:1;overflow-wrap:anywhere}
 .detail-row>div:last-child{flex-shrink:0}
 @media(max-width:460px){.sale-item{grid-template-columns:minmax(0,1fr)}.sale-item-heading{grid-column:1}.item-quantity{max-width:130px}.panel{padding:16px}.detail-row{flex-wrap:wrap}.purchase-products li{justify-content:flex-start}}
+
+.sale-item{grid-template-columns:120px minmax(0,1fr)}
+.sale-item .item-product{grid-column:1/-1}
+.sale-item .item-quantity{grid-column:1;max-width:none}
+.sale-item .item-price-field{grid-column:2}
+.item-line-total{grid-column:1/-1;text-align:right;font-size:15px;font-weight:800;color:#795167}
+.item-price-field .money{padding:0 10px}
+.sale-item .money input{min-width:0}
+#saleAmount[readonly],#editSaleAmount[readonly]{font-weight:800;color:#795167}
+.add-product:disabled{opacity:.5;cursor:default}
+@media(max-width:460px){.sale-item{grid-template-columns:minmax(0,1fr) minmax(0,1.5fr)}.sale-item-heading{grid-column:1/-1}}

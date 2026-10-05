@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="es">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#c97f96"><title>Nueva Venta · Luna Vital</title><link rel="stylesheet" href="styles.css?v=13"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#c97f96"><title>Nueva Venta · Luna Vital</title><link rel="stylesheet" href="styles.css?v=14"></head>
 <body data-page="sale"><main class="shell">
   <header class="topbar"><a class="back" href="menu.html">← Menú</a><span id="connectionStatus" class="status">Conectando…</span></header>
   <div class="page-title"><h1>Registrar venta</h1><p>Todos los productos de tu cliente en una sola venta.</p></div>
@@ -13,11 +13,11 @@
         <button id="addSaleItemButton" type="button" class="secondary add-product">+ Agregar otro producto</button>
         <p id="saleItemsSummary" class="stock-hint" aria-live="polite"></p>
       </section>
-      <div class="field"><label for="saleAmount">Monto total de la venta</label><div class="money"><span>₡</span><input id="saleAmount" type="text" inputmode="numeric" placeholder="0" aria-describedby="saleAmountHint"></div><small id="saleAmountHint" class="stock-hint">Ingresá el total a cobrar por todos los productos.</small></div>
+      <div class="field"><label for="saleAmount">Monto total de la venta</label><div class="money"><span>₡</span><input id="saleAmount" type="text" readonly inputmode="numeric" placeholder="0" aria-describedby="saleAmountHint"></div><small id="saleAmountHint" class="stock-hint">Se calcula con el precio y la cantidad de cada producto.</small></div>
       <div class="field"><label for="saleDate">Fecha</label><input id="saleDate" type="date"></div>
       <div class="field"><label>Estado</label><div class="segmented"><label><input type="radio" name="saleStatus" value="paid" checked><span>✓ Pagado</span></label><label><input type="radio" name="saleStatus" value="credit"><span>◷ A crédito</span></label></div></div>
       <button id="saveSaleButton" type="submit" class="primary">Guardar venta</button>
     </fieldset>
     <p id="saleMessage" class="message" role="status"></p>
   </form></section>
-</main><script type="module" src="app.js?v=13"></script></body></html>
+</main><script type="module" src="app.js?v=14"></script></body></html>

@@ -32,17 +32,24 @@ function saleItems(sale){
 }
 function saleProductsHTML(sale){
   const items=saleItems(sale);
-  return items.length?`<ul class="purchase-products">${items.map(item=>`<li><span>${esc(item.article)}</span><span class="product-units">× ${esc(item.quantity)}</span></li>`).join("")}</ul>`:`<strong>${esc(sale.article)}</strong>`;
+  return items.length?`<ul class="purchase-products">${items.map(item=>`<li><span>${esc(item.article)}${item.unitPrice==null?"":`<small>${money(item.unitPrice)} por unidad</small>`}</span><span class="product-units">× ${esc(item.quantity)}${item.unitPrice==null?"":`<small>${money(item.unitPrice*item.quantity)}</small>`}</span></li>`).join("")}</ul>`:`<strong>${esc(sale.article)}</strong>`;
 }
 function itemTotals(items){const totals=new Map();for(const item of items)totals.set(item.productId,(totals.get(item.productId)||0)+Number(item.quantity));return totals}
 function saleItemFields(items){
-  return {items,productId:items.length===1?items[0].productId:"",article:items.length===1?items[0].article:items.map(x=>`${x.article} × ${x.quantity}`).join("; "),quantity:items.reduce((total,x)=>total+x.quantity,0)};
+  return {items,productId:items.length===1?items[0].productId:"",article:items.length===1?items[0].article:`${items.length} productos`,quantity:items.reduce((total,x)=>total+x.quantity,0)};
 }
+const MAX_SALE_PRODUCTS=5;
 let itemRowNumber=0,saleSaving=false;
+function unitPriceValue(raw){
+  const value=String(raw??'').trim();
+  if(!/^(?:\d+|\d{1,3}(?:[.,\s]\d{3})+)$/.test(value))return null;
+  const price=parseAmount(value);
+  return Number.isSafeInteger(price)&&price>0&&price<=100000000?price:null;
+}
 function addSaleItem(containerId,item={}){
   const container=$(containerId),row=document.createElement("div"),id=`sale-item-${++itemRowNumber}`;
   row.className="sale-item";
-  row.innerHTML=`<div class="sale-item-heading"><strong class="item-number"></strong><button type="button" class="textbtn remove-sale-item">Quitar</button></div><div class="field item-product"><label for="${id}-product">Producto</label><select id="${id}-product" class="item-select" aria-describedby="${id}-stock"><option value="${esc(item.productId||"")}">${esc(item.article||"Seleccionar producto…")}</option></select><small id="${id}-stock" class="item-stock stock-hint"></small></div><div class="field item-quantity"><label for="${id}-quantity">Cantidad</label><input id="${id}-quantity" class="item-qty" type="number" inputmode="numeric" min="1" step="1" value="${esc(item.quantity??1)}"></div>`;
+  row.innerHTML=`<div class="sale-item-heading"><strong class="item-number"></strong><button type="button" class="textbtn remove-sale-item">Quitar</button></div><div class="field item-product"><label for="${id}-product">Producto</label><select id="${id}-product" class="item-select" aria-describedby="${id}-stock"><option value="${esc(item.productId||"")}">${esc(item.article||"Seleccionar producto…")}</option></select><small id="${id}-stock" class="item-stock stock-hint"></small></div><div class="field item-quantity"><label for="${id}-quantity">Cantidad</label><input id="${id}-quantity" class="item-qty" type="number" inputmode="numeric" min="1" step="1" value="${esc(item.quantity??1)}"></div><div class="field item-price-field"><label for="${id}-price">Precio unitario</label><div class="money"><span>₡</span><input id="${id}-price" class="item-price" type="text" inputmode="numeric" placeholder="0" value="${item.unitPrice==null?"":esc(new Intl.NumberFormat("es-CR").format(item.unitPrice))}"></div></div><div class="item-line-total" aria-live="polite"></div>`;
   container.append(row);
   refreshSaleItems(containerId);
   return row;
@@ -64,31 +71,53 @@ function refreshSaleItems(containerId){
     const hint=row.querySelector('.item-stock'),quantity=Number(row.querySelector('.item-qty').value);
     hint.textContent=old?(product?`${available} ${available===1?"unidad disponible":"unidades disponibles"}`:"Este producto ya no está disponible."):(ready.inventory?(options.length?"":"Agregá productos desde Inventario."):"Cargando inventario…");
     hint.classList.toggle('error',Boolean(old)&&(!product||quantity>available));
+    const price=unitPriceValue(row.querySelector('.item-price').value);
+    row.querySelector('.item-line-total').textContent=price!==null&&Number.isSafeInteger(quantity)&&quantity>0?`Subtotal: ${money(price*quantity)}`:'Subtotal: ₡0';
   });
   const chosen=rows.filter(row=>row.querySelector('.item-select').value),units=chosen.reduce((sum,row)=>sum+(Number(row.querySelector('.item-qty').value)||0),0);
   const summary=$(editing?'#editSaleItemsSummary':'#saleItemsSummary');
   summary.textContent=chosen.length?`${chosen.length} ${chosen.length===1?"producto":"productos"} · ${units} ${units===1?"unidad":"unidades"}`:"";
+  const priceValues=rows.map(row=>unitPriceValue(row.querySelector('.item-price').value));
+  const anyPrice=rows.some(row=>row.querySelector('.item-price').value.trim()!=='');
+  const autoTotal=!editing||anyPrice;
+  const amount=$(editing?'#editSaleAmount':'#saleAmount');
+  amount.readOnly=autoTotal;
+  if(autoTotal){
+    const total=rows.reduce((sum,row,i)=>sum+(priceValues[i]||0)*(Number(row.querySelector('.item-qty').value)||0),0);
+    amount.value=new Intl.NumberFormat('es-CR').format(total);
+  }
+  if(editing)$('#editSaleAmountHint').textContent=autoTotal?'Total calculado con los precios y cantidades.':'Esta compra anterior no tiene precios individuales. Conservá su total o ingresá el precio de todos los productos.';
+  $(editing?'#addEditSaleItemButton':'#addSaleItemButton').disabled=rows.length>=MAX_SALE_PRODUCTS;
 }
-function readSaleItems(containerId){
+function readSaleItems(containerId,{allowUnpriced=false}={}){
   const rows=[...$(containerId).querySelectorAll('.sale-item')],ids=new Set();
   if(!rows.length)throw new Error("Agregá al menos un producto.");
-  return rows.map((row,index)=>{
+  if(rows.length>MAX_SALE_PRODUCTS)throw new Error(`Podés agregar hasta ${MAX_SALE_PRODUCTS} productos por venta.`);
+  const keepUnpriced=allowUnpriced&&rows.every(row=>!row.querySelector('.item-price').value.trim());
+  const items=rows.map((row,index)=>{
     const productId=row.querySelector('.item-select').value,raw=row.querySelector('.item-qty').value.trim(),quantity=Number(raw);
     if(!productId)throw new Error(`Seleccioná el producto ${index+1}.`);
-    if(!/^\d+$/.test(raw)||!Number.isSafeInteger(quantity)||quantity<=0)throw new Error(`Ingresá una cantidad entera mayor que cero para el producto ${index+1}.`);
+    if(!/^\d+$/.test(raw)||!Number.isSafeInteger(quantity)||quantity<=0||quantity>10000)throw new Error(`Ingresá una cantidad entera entre 1 y 10 000 para el producto ${index+1}.`);
     if(ids.has(productId))throw new Error("Este producto está repetido. Usá una sola fila y ajustá su cantidad.");
-    ids.add(productId);return{productId,quantity};
+    const unitPrice=unitPriceValue(row.querySelector('.item-price').value);
+    if(!keepUnpriced&&unitPrice===null)throw new Error(`Ingresá el precio unitario del producto ${index+1}, en colones enteros.`);
+    ids.add(productId);return keepUnpriced?{productId,quantity}:{productId,quantity,unitPrice};
   });
+  if(items.reduce((sum,item)=>sum+item.quantity,0)>10000)throw new Error('La venta no puede superar 10 000 unidades.');
+  return items;
 }
 function bindSaleItems(containerId,buttonId){
-  $(buttonId).onclick=()=>addSaleItem(containerId).querySelector('.item-select').focus();
+  $(buttonId).onclick=()=>{if($(containerId).children.length<MAX_SALE_PRODUCTS)addSaleItem(containerId).querySelector('.item-select').focus()};
   $(containerId).addEventListener('click',event=>{
     const remove=event.target.closest('.remove-sale-item');
     if(remove&&$(containerId).children.length>1){remove.closest('.sale-item').remove();refreshSaleItems(containerId)}
   });
-  $(containerId).addEventListener('change',()=>refreshSaleItems(containerId));
+  $(containerId).addEventListener('change',event=>{
+    if(event.target.matches('.item-price')){const price=unitPriceValue(event.target.value);if(price!==null)event.target.value=new Intl.NumberFormat('es-CR').format(price)}
+    refreshSaleItems(containerId);
+  });
   $(containerId).addEventListener('input',event=>{
-    if(event.target.matches('.item-qty'))refreshSaleItems(containerId);
+    if(event.target.matches('.item-qty,.item-price'))refreshSaleItems(containerId);
   });
 }
 function renderSaleProducts(){refreshSaleItems('#saleItems')}
@@ -118,8 +147,9 @@ async function prepareSaleStock(transaction,requested,previous=[]){
 async function saveSale(event){
   event?.preventDefault();if(saleSaving)return;
   const client=normName($('#clientName').value),amount=parseAmount($('#saleAmount').value),date=$('#saleDate').value,status=$("input[name='saleStatus']:checked")?.value,out=$('#saleMessage');
-  if(!client||!Number.isSafeInteger(amount)||amount<=0||!date||!['paid','credit'].includes(status)){msg(out,"Completá cliente, monto total, fecha y estado.",true);return}
+  if(!client||client.length>100||!date||!['paid','credit'].includes(status)){msg(out,"Completá cliente (máximo 100 caracteres), fecha y estado.",true);return}
   let requested;try{requested=readSaleItems('#saleItems')}catch(error){msg(out,error.message,true);return}
+  if(!Number.isSafeInteger(amount)||amount<=0||amount>100000000){msg(out,'Revisá los precios: el total debe ser mayor que cero y no superar ₡100 000 000.',true);return}
   saleSaving=true;$('#saleFields').disabled=true;$('#saveSaleButton').textContent='Guardando…';msg(out,"");
   try{
     const saleDoc=doc(salesRef);
@@ -224,9 +254,12 @@ function openEditSale(id){
   const sale=sales.find(x=>x.id===id);if(!sale)return;
   editSaleId=id;editSaleSnapshot={...sale};
   $('#editSaleClientName').value=sale.clientName||'';
+  $('#editSaleAmount').readOnly=false;$('#editSaleAmountHint').textContent='';
   $('#editSaleAmount').value=new Intl.NumberFormat('es-CR').format(Number(sale.amount)||0);
   $('#editSaleDate').value=sale.date||todayISO;
-  const items=saleItems(sale);$('#editSaleItems').replaceChildren();
+  const items=saleItems(sale).map(item=>({...item}));
+  if(items.length===1&&items[0].unitPrice==null&&Number.isSafeInteger(sale.amount/items[0].quantity))items[0].unitPrice=sale.amount/items[0].quantity;
+  $('#editSaleItems').replaceChildren();
   $('#editSaleProducts').classList.toggle('hidden',!items.length);
   $('#editSaleLegacy').classList.toggle('hidden',Boolean(items.length));
   $('#editSaleLegacy').textContent=`Producto: ${sale.article||'Compra anterior'}. Esta compra no tiene productos vinculados al inventario.`;
@@ -236,9 +269,9 @@ function openEditSale(id){
 async function saveEditedSale(event){
   event?.preventDefault();if(!editSaleSnapshot||editSaleSaving)return;
   const original=editSaleSnapshot,client=normName($('#editSaleClientName').value),amount=parseAmount($('#editSaleAmount').value),date=$('#editSaleDate').value,out=$('#editSaleMessage');
-  if(!client||!Number.isSafeInteger(amount)||amount<=0||!date){msg(out,'Completá cliente, monto total y fecha.',true);return}
+  if(!client||client.length>100||!Number.isSafeInteger(amount)||amount<=0||amount>100000000||!date){msg(out,'Revisá cliente, precios y fecha. El total debe ser mayor que cero y no superar ₡100 000 000.',true);return}
   let requested=null;
-  if(saleItems(original).length){try{requested=readSaleItems('#editSaleItems')}catch(error){msg(out,error.message,true);return}}
+  if(saleItems(original).length){try{requested=readSaleItems('#editSaleItems',{allowUnpriced:saleItems(original).every(item=>item.unitPrice==null)})}catch(error){msg(out,error.message,true);return}}
   editSaleSaving=true;$('#editSaleFields').disabled=true;$('#saveEditSaleButton').textContent='Guardando…';msg(out,'');
   try{
     await runTransaction(db,async transaction=>{
