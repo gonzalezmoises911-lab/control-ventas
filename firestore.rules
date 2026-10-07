@@ -148,7 +148,8 @@ service cloud.firestore {
           'normalizedName',
           'quantity',
           'createdAt',
-          'updatedAt'
+          'updatedAt',
+          'unitPrice'
         ]) &&
         request.resource.data.name is string &&
         request.resource.data.name.size() >= 1 &&
@@ -160,7 +161,9 @@ service cloud.firestore {
         request.resource.data.quantity >= 0 &&
         request.resource.data.quantity <= 100000 &&
         request.resource.data.createdAt == request.time &&
-        request.resource.data.updatedAt == request.time;
+        request.resource.data.updatedAt == request.time &&
+        (!('unitPrice' in request.resource.data) ||
+          (request.resource.data.unitPrice is int && request.resource.data.unitPrice > 0 && request.resource.data.unitPrice <= 100000000));
 
       // Modificar inventario
       allow update: if
@@ -169,7 +172,8 @@ service cloud.firestore {
           'normalizedName',
           'quantity',
           'createdAt',
-          'updatedAt'
+          'updatedAt',
+          'unitPrice'
         ]) &&
         request.resource.data.name == resource.data.name &&
         request.resource.data.normalizedName == resource.data.normalizedName &&
@@ -177,7 +181,9 @@ service cloud.firestore {
         request.resource.data.quantity is int &&
         request.resource.data.quantity >= 0 &&
         request.resource.data.quantity <= 100000 &&
-        request.resource.data.updatedAt == request.time;
+        request.resource.data.updatedAt == request.time &&
+        (!('unitPrice' in request.resource.data) ||
+          (request.resource.data.unitPrice is int && request.resource.data.unitPrice > 0 && request.resource.data.unitPrice <= 100000000));
 
       allow delete: if false;
     }

@@ -67,3 +67,5 @@ dialog{border:0;background:transparent;padding:0}dialog::backdrop{background:rgb
 #saleAmount[readonly],#editSaleAmount[readonly]{font-weight:800;color:#795167}
 .add-product:disabled{opacity:.5;cursor:default}
 @media(max-width:460px){.sale-item{grid-template-columns:minmax(0,1fr) minmax(0,1.5fr)}.sale-item-heading{grid-column:1/-1}}
+
+.inventory-price{display:block;margin-top:8px;text-align:left}.inventory-item>div:first-child{min-width:0;flex:1}.inventory-item strong{overflow-wrap:anywhere}
